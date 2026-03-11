@@ -39,5 +39,16 @@ namespace Octopath_Traveler.Data
             string jsonString = File.ReadAllText(filePath);
             return JsonSerializer.Deserialize<List<Beast>>(jsonString, _jsonOptions);
         }
+        
+        public List<string> LoadSkillNames(string filePath)
+        {
+            if (!File.Exists(filePath)) return new List<string>();
+
+            string jsonString = File.ReadAllText(filePath);
+            var skills = JsonSerializer.Deserialize<List<Skill>>(jsonString, _jsonOptions);
+    
+            // Usamos LINQ para extraer solo la propiedad "Name" de cada habilidad
+            return skills.Select(s => s.Name).ToList();
+        }
     }
 }
