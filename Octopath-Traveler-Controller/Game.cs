@@ -56,5 +56,13 @@ public class Game
             view.WriteLine("Archivo de equipos no válido");
             return; // Termina el juego
         }
+        
+        // Si llegamos hasta aquí, el equipo es 100% válido y listo para pelear
+        // Las tuplas nullable en C# necesitan el ".Value" para extraer los datos
+        var playerTeam = teams.Value.playerTeam;
+        var enemyTeam = teams.Value.enemyTeam;
+
+        var combatManager = new CombatManager(view, playerTeam, enemyTeam);
+        combatManager.StartCombat();
     }
 }
