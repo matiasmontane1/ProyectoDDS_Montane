@@ -5,7 +5,6 @@ namespace Octopath_Traveler.Data
 {
     public class JsonDataLoader
     {
-        // Configuramos opciones para que el lector no sea estricto con mayúsculas/minúsculas
         private readonly JsonSerializerOptions _jsonOptions;
 
         public JsonDataLoader()
@@ -16,36 +15,35 @@ namespace Octopath_Traveler.Data
             };
         }
 
-        public List<Traveler> LoadTravelers(string filePath)
+        private T DeserializeFromFile<T>(string filePath)
         {
             if (!File.Exists(filePath))
             {
-                throw new FileNotFoundException($"No se encontró el archivo de viajeros en: {filePath}");
+                throw new FileNotFoundException($"No se encontró el archivo JSON en: {filePath}");
             }
 
             string jsonString = File.ReadAllText(filePath);
-            return JsonSerializer.Deserialize<List<Traveler>>(jsonString, _jsonOptions);
+            return JsonSerializer.Deserialize<T>(jsonString, _jsonOptions);
+        }
+
+        public List<Traveler> LoadTravelers(string filePath)
+        {
+            return DeserializeFromFile<List<Traveler>>(filePath);
         }
 
         public List<Beast> LoadBeasts(string filePath)
         {
-            if (!File.Exists(filePath))
-            {
-                throw new FileNotFoundException($"No se encontró el archivo de bestias en: {filePath}");
-            }
-
-            string jsonString = File.ReadAllText(filePath);
-            return JsonSerializer.Deserialize<List<Beast>>(jsonString, _jsonOptions);
+            return DeserializeFromFile<List<Beast>>(filePath);
         }
         
         public List<string> LoadSkillNames(string filePath)
         {
-            if (!File.Exists(filePath)) return new List<string>();
+            if (!File.Exists(filePath)) 
+            {
+                return new List<string>();
+            }
 
-            string jsonString = File.ReadAllText(filePath);
-            var skills = JsonSerializer.Deserialize<List<Skill>>(jsonString, _jsonOptions);
-    
-            // Usamos LINQ para extraer solo la propiedad "Name" de cada habilidad
+            var skills = DeserializeFromFile<List<Skill>>(filePath);
             return skills.Select(s => s.Name).ToList();
         }
     }
