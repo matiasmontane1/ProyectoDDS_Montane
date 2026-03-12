@@ -1,68 +1,70 @@
 using Octopath_Traveler_View;
 using Octopath_Traveler.Data;
+using Octopath_Traveler.Models;
 
 namespace Octopath_Traveler;
 
 public class Game
 {
-    private View view;
-    private string teamsFolder;
+    private readonly View _view; 
+    private readonly string _teamsFolder;
+
     public Game(View view, string teamsFolder)
     {
-        this.view = view;
-        this.teamsFolder = teamsFolder;
+        _view = view;
+        _teamsFolder = teamsFolder;
     }
 
     public void Play()
     {
-        // 1. Mostrar las opciones de equipos
-        view.WriteLine("Elige un archivo para cargar los equipos");
+        string selectedFile = PromptTeamSelection();
+        if (selectedFile == null)
+        {
+            _view.WriteLine("Archivo de equipos no válido");
+            return; 
+        }
+
+        var teams = LoadGameDataAndTeams(selectedFile);
+        if (teams == null)
+        {
+            _view.WriteLine("Archivo de equipos no válido");
+            return; 
+        }
+
+        var combatManager = new CombatManager(_view, teams.Value.playerTeam, teams.Value.enemyTeam);
+        combatManager.StartCombat();
+    }
+
+    private string PromptTeamSelection()
+    {
+        _view.WriteLine("Elige un archivo para cargar los equipos");
         
-        // Obtenemos los archivos .txt y los ordenamos alfabéticamente
-        string[] files = Directory.GetFiles(teamsFolder, "*.txt").OrderBy(f => f).ToArray();
+        string[] files = Directory.GetFiles(_teamsFolder, "*.txt").OrderBy(f => f).ToArray();
         
         for (int i = 0; i < files.Length; i++)
         {
-            view.WriteLine($"{i}: {Path.GetFileName(files[i])}");
+            _view.WriteLine($"{i}: {Path.GetFileName(files[i])}");
         }
 
-        // 2. Pedir el input al usuario (recuerda, NO imprimimos "INPUT:")
-        string input = view.ReadLine();
+        string input = _view.ReadLine();
         
-        // 3. Validar que el input sea un número válido y esté en el rango
-        if (!int.TryParse(input, out int selectedIndex) || selectedIndex < 0 || selectedIndex >= files.Length)
+        if (int.TryParse(input, out int selectedIndex) && selectedIndex >= 0 && selectedIndex < files.Length)
         {
-            view.WriteLine("Archivo de equipos no válido");
-            return; // Termina el juego
+            return files[selectedIndex];
         }
 
-        string selectedFile = files[selectedIndex];
+        return null; // Retornamos null si el usuario se equivocó
+    }
 
-        // 4. Cargar la "Base de Datos" desde los JSON
+    private (List<Traveler> playerTeam, List<Beast> enemyTeam)? LoadGameDataAndTeams(string selectedFile)
+    {
         var jsonLoader = new JsonDataLoader();
-        // Asumimos que la carpeta data está en el directorio de ejecución
         var characters = jsonLoader.LoadTravelers("data/characters.json");
         var enemies = jsonLoader.LoadBeasts("data/enemies.json");
         var activeSkills = jsonLoader.LoadSkillNames("data/skills.json");
         var passiveSkills = jsonLoader.LoadSkillNames("data/passive_skills.json");
 
-        // 5. Validar el equipo usando nuestra lógica Clean Code
         var teamLoader = new TeamLoader();
-        var teams = teamLoader.LoadTeam(selectedFile, characters, enemies, activeSkills, passiveSkills);
-
-        if (teams == null)
-        {
-            // Si el teamLoader devolvió null, es porque rompió alguna regla del enunciado
-            view.WriteLine("Archivo de equipos no válido");
-            return; // Termina el juego
-        }
-        
-        // Si llegamos hasta aquí, el equipo es 100% válido y listo para pelear
-        // Las tuplas nullable en C# necesitan el ".Value" para extraer los datos
-        var playerTeam = teams.Value.playerTeam;
-        var enemyTeam = teams.Value.enemyTeam;
-
-        var combatManager = new CombatManager(view, playerTeam, enemyTeam);
-        combatManager.StartCombat();
+        return teamLoader.LoadTeam(selectedFile, characters, enemies, activeSkills, passiveSkills);
     }
 }
