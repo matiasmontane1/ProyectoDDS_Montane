@@ -4,23 +4,25 @@ using System.Collections.Generic;
 
 public class Traveler : Unit
 {
-    public List<string> Weapons { get; set; }
-    public List<string> Skills { get; set; }
+    private const int InitialBp = 1;
+    private const int MaxBp = 5;
+
+    public List<string> Weapons { get; set; } = new List<string>();
+    public List<string> Skills { get; set; } = new List<string>();
     
-    // Estado exclusivo del viajero en combate
     public int CurrentSP { get; private set; }
     public int CurrentBP { get; private set; }
 
     public override void InitializeState()
     {
-        base.InitializeState(); // Inicializa el HP
+        base.InitializeState(); 
         CurrentSP = Stats.SP;
-        CurrentBP = 1; // Según las reglas, inician con 1 BP
+        CurrentBP = InitialBp; 
     }
     
     public void RecoverBP()
     {
-        if (CurrentBP < 5) // El máximo de BP es 5
+        if (CurrentBP < MaxBp) 
         {
             CurrentBP++;
         }
