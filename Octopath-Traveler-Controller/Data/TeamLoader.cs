@@ -86,6 +86,11 @@ public class TeamLoader
             
             string activePart = line.Substring(firstParen + 1, endParen - firstParen - 1);
             if (!ValidateSkills(activePart, validActive, 8)) return null;
+            
+            if (!string.IsNullOrWhiteSpace(activePart))
+            {
+                traveler.Skills = activePart.Split(',').Select(s => s.Trim()).ToList();
+            }
         }
 
         // 3. Extraer habilidades pasivas [...]
