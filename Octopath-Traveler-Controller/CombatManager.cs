@@ -9,8 +9,11 @@ public class CombatManager
     private readonly List<Traveler> _playerTeam;
     private readonly List<Beast> _enemyTeam;
     private int _currentRound;
-    
+
     private const string Separator = "----------------------------------------";
+    private const double PhysicalAttackModifier = 1.3;
+
+    private enum TravelerAction { BasicAttack = 1, UseSkill = 2, Defend = 3, Flee = 4 }
 
     public CombatManager(View view, List<Traveler> playerTeam, List<Beast> enemyTeam)
     {
@@ -27,64 +30,40 @@ public class CombatManager
     {
         while (true)
         {
-            if (CheckWinCondition(out string winnerMessage))
+            string winnerMessage = GetWinnerMessage();
+            if (winnerMessage != null)
             {
                 PrintMessageWithSeparator(winnerMessage);
-                return; 
+                return;
             }
-            
+
             _view.WriteLine(Separator);
             _view.WriteLine($"INICIA RONDA {_currentRound}");
-            
-            var turnQueue = GenerateTurnQueue().Where(u => !u.IsDead).ToList();
-            
-            while (turnQueue.Count > 0)
-            {
-                if (CheckWinCondition(out string innerWinnerMessage))
-                {
-                    PrintMessageWithSeparator(innerWinnerMessage);
-                    return; 
-                }
 
-                bool battleEnded = ProcessSingleTurn(turnQueue);
-                if (battleEnded) return;
-            }
-            
+            var turnQueue = GenerateTurnQueue().Where(u => !u.IsDead).ToList();
+
+            if (HandleTurns(turnQueue)) return;
+
             RecoverTravelersBP();
             _currentRound++;
         }
     }
 
-    private bool ProcessSingleTurn(List<Unit> turnQueue)
+    private bool HandleTurns(List<Unit> turnQueue)
     {
-        var currentUnit = turnQueue[0];
-
-        if (currentUnit.IsDead) 
+        while (turnQueue.Count > 0)
         {
-            turnQueue.RemoveAt(0);
-            return false;
-        }
+            string winnerMessage = GetWinnerMessage();
+            if (winnerMessage != null)
+            {
+                PrintMessageWithSeparator(winnerMessage);
+                return true;
+            }
 
-        PrintGameState();
-        PrintTurnOrder(turnQueue, "Turnos de la ronda");
-        
-        var nextRoundQueue = GenerateTurnQueue().Where(u => !u.IsDead).ToList();
-        PrintTurnOrder(nextRoundQueue, "Turnos de la siguiente ronda");
-
-        if (currentUnit is Traveler traveler)
-        {
-            bool fled = HandleTravelerTurn(traveler);
-            if (fled) return true; // Fin del combate
+            bool hasBattleEnded = HandleSingleTurn(turnQueue);
+            if (hasBattleEnded) return true;
         }
-        else if (currentUnit is Beast beast)
-        {
-            HandleBeastTurn(beast);
-        }
-        
-        turnQueue.RemoveAt(0);
-        turnQueue.RemoveAll(u => u.IsDead);
-        
-        return false; // El combate sigue
+        return false;
     }
 
     private void RecoverTravelersBP()
@@ -93,6 +72,38 @@ public class CombatManager
         {
             traveler.RecoverBP();
         }
+    }
+
+    private bool HandleSingleTurn(List<Unit> turnQueue)
+    {
+        var currentUnit = turnQueue[0];
+
+        if (currentUnit.IsDead)
+        {
+            turnQueue.RemoveAt(0);
+            return false;
+        }
+
+        PrintGameState();
+        PrintTurnOrder(turnQueue, "Turnos de la ronda");
+
+        var nextRoundQueue = GenerateTurnQueue().Where(u => !u.IsDead).ToList();
+        PrintTurnOrder(nextRoundQueue, "Turnos de la siguiente ronda");
+
+        if (currentUnit is Traveler traveler)
+        {
+            bool fled = HandleTravelerTurn(traveler);
+            if (fled) return true;
+        }
+        else if (currentUnit is Beast beast)
+        {
+            HandleBeastTurn(beast);
+        }
+
+        turnQueue.RemoveAt(0);
+        turnQueue.RemoveAll(u => u.IsDead);
+
+        return false;
     }
 
     private bool HandleTravelerTurn(Traveler traveler)
@@ -108,10 +119,12 @@ public class CombatManager
 
             string input = _view.ReadLine();
 
-            if (input == "1" && ExecuteBasicAttack(traveler)) return false;
-            if (input == "2") HandleSkillMenu(traveler);
-            if (input == "3") return false; 
-            if (input == "4")
+            if (!Enum.TryParse<TravelerAction>(input, out TravelerAction action) || !Enum.IsDefined(action)) continue;
+
+            if (action == TravelerAction.BasicAttack && HandleBasicAttack(traveler)) return false;
+            if (action == TravelerAction.UseSkill) HandleSkillMenu(traveler);
+            if (action == TravelerAction.Defend) return false;
+            if (action == TravelerAction.Flee)
             {
                 PrintMessageWithSeparator("El equipo de viajeros ha huido!");
                 _view.WriteLine(Separator);
@@ -121,46 +134,47 @@ public class CombatManager
         }
     }
 
-    private bool ExecuteBasicAttack(Traveler traveler)
+    private bool HandleBasicAttack(Traveler traveler)
     {
         string selectedWeapon = PromptWeaponSelection(traveler);
-        if (selectedWeapon == null) return false; // El jugador canceló
+        if (selectedWeapon == null) return false;
 
         var aliveEnemies = _enemyTeam.Where(e => !e.IsDead).ToList();
         Beast target = PromptTargetSelection(traveler, aliveEnemies);
-        if (target == null) return false; // El jugador canceló
+        if (target == null) return false;
 
         PromptBPUsage(traveler);
 
-        ResolveBasicAttack(traveler, target, selectedWeapon);
+        ExecuteBasicAttack(traveler, target, selectedWeapon);
 
         return true;
     }
-    
+
     private string PromptWeaponSelection(Traveler traveler)
     {
         _view.WriteLine(Separator);
         _view.WriteLine("Seleccione un arma");
-        
+
         for (int i = 0; i < traveler.Weapons.Count; i++)
         {
             _view.WriteLine($"{i + 1}: {traveler.Weapons[i]}");
         }
         _view.WriteLine($"{traveler.Weapons.Count + 1}: Cancelar");
 
-        if (int.TryParse(_view.ReadLine(), out int choice) && choice > 0 && choice <= traveler.Weapons.Count)
+        bool isWeaponChoiceValid = int.TryParse(_view.ReadLine(), out int choice) && choice > 0 && choice <= traveler.Weapons.Count;
+        if (isWeaponChoiceValid)
         {
             return traveler.Weapons[choice - 1];
         }
-        
-        return null; 
+
+        return null;
     }
 
     private Beast PromptTargetSelection(Traveler traveler, List<Beast> aliveEnemies)
     {
         _view.WriteLine(Separator);
         _view.WriteLine($"Seleccione un objetivo para {traveler.Name}");
-        
+
         for (int i = 0; i < aliveEnemies.Count; i++)
         {
             var e = aliveEnemies[i];
@@ -168,11 +182,12 @@ public class CombatManager
         }
         _view.WriteLine($"{aliveEnemies.Count + 1}: Cancelar");
 
-        if (int.TryParse(_view.ReadLine(), out int choice) && choice > 0 && choice <= aliveEnemies.Count)
+        bool isTargetChoiceValid = int.TryParse(_view.ReadLine(), out int choice) && choice > 0 && choice <= aliveEnemies.Count;
+        if (isTargetChoiceValid)
         {
             return aliveEnemies[choice - 1];
         }
-        
+
         return null;
     }
 
@@ -186,7 +201,7 @@ public class CombatManager
         }
     }
 
-    private void ResolveBasicAttack(Traveler traveler, Beast target, string weapon)
+    private void ExecuteBasicAttack(Traveler traveler, Beast target, string weapon)
     {
         int damage = CalculatePhysicalDamage(traveler.Stats.PhysAtk, target.Stats.PhysDef);
         target.TakeDamage(damage);
@@ -199,9 +214,9 @@ public class CombatManager
 
     private void HandleSkillMenu(Traveler traveler)
     {
-        _view.WriteLine(Separator); 
+        _view.WriteLine(Separator);
         _view.WriteLine($"Seleccione una habilidad para {traveler.Name}");
-        
+
         int count = 0;
         if (traveler.Skills != null)
         {
@@ -234,7 +249,7 @@ public class CombatManager
 
     private int CalculatePhysicalDamage(int attackerPhysAtk, int targetPhysDef)
     {
-        int damage = (int)Math.Floor((attackerPhysAtk * 1.3) - targetPhysDef);
+        int damage = (int)Math.Floor((attackerPhysAtk * PhysicalAttackModifier) - targetPhysDef);
         return Math.Max(0, damage);
     }
 
@@ -285,10 +300,10 @@ public class CombatManager
         _view.WriteLine(message);
     }
 
-    private bool CheckWinCondition(out string message)
+    private string GetWinnerMessage()
     {
-        if (_enemyTeam.All(b => b.IsDead)) { message = "Gana equipo del jugador"; return true; }
-        if (_playerTeam.All(t => t.IsDead)) { message = "Gana equipo del enemigo"; return true; }
-        message = ""; return false;
+        if (_enemyTeam.All(b => b.IsDead)) return "Gana equipo del jugador";
+        if (_playerTeam.All(t => t.IsDead)) return "Gana equipo del enemigo";
+        return null;
     }
 }

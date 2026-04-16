@@ -64,7 +64,7 @@ public class Game
         var activeSkills = jsonLoader.LoadSkillNames("data/skills.json");
         var passiveSkills = jsonLoader.LoadSkillNames("data/passive_skills.json");
 
-        var teamLoader = new TeamLoader();
-        return teamLoader.LoadTeam(selectedFile, characters, enemies, activeSkills, passiveSkills);
+        var teamLoader = new TeamLoader(characters, enemies, activeSkills, passiveSkills);
+        return teamLoader.LoadTeamFrom(selectedFile);
     }
 }

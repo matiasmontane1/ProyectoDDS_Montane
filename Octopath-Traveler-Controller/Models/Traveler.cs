@@ -9,6 +9,7 @@ public class Traveler : Unit
 
     public List<string> Weapons { get; set; } = new List<string>();
     public List<string> Skills { get; set; } = new List<string>();
+    public List<string> PassiveSkills { get; set; } = new List<string>();
     
     public int CurrentSP { get; private set; }
     public int CurrentBP { get; private set; }
