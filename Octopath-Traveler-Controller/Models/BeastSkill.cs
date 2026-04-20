@@ -10,7 +10,7 @@ public class BeastSkill
 
     public bool IsAoe => Target == "Enemies";
     public bool IsPhysical => Description?.Contains("físico") == true;
-    public bool IsVortalClaw => Description?.Contains("mitad del HP") == true;
+    public bool IsVortalClaw => Description?.Contains("mitad el HP") == true;
     public bool IsNonDamaging => Modifier == 0 && !IsVortalClaw;
 
     public string TargetCriteria

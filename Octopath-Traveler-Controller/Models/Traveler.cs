@@ -38,4 +38,17 @@ public class Traveler : Unit
     {
         CurrentSP = Math.Max(0, CurrentSP - amount);
     }
+    
+    public override void TakeDamage(int damage)
+    {
+        base.TakeDamage(damage); // Aplica la reducción de HP normal
+        
+        // Si después del daño el viajero muere, limpiamos sus turnos
+        if (IsDead)
+        {
+            IsDefending = false;
+            SpearheadNextRound = false;
+            IsDefenderNextRound = false;
+        }
+    }
 }

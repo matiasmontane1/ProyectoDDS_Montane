@@ -16,7 +16,7 @@ public abstract class Unit
         CurrentHP = Stats.HP;
     }
 
-    public void TakeDamage(int damage)
+    public virtual void TakeDamage(int damage)
     {
         CurrentHP = Math.Max(0, CurrentHP - damage);
     }

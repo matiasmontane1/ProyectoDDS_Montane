@@ -246,6 +246,11 @@ public class CombatManager
 
     private bool HandleTravelerTurn(Traveler traveler, List<Unit> turnQueue)
     {
+        if (traveler.IsDead) 
+            return false;
+        
+        traveler.IsDefending = false;
+        
         traveler.SpearheadNextRound = false;
         traveler.IsDefenderNextRound = false;
 
@@ -939,10 +944,15 @@ public class CombatManager
         return (int)Math.Floor(elemDef * modifier);
     }
 
-    private static int ApplyLastStandBonus(double baseRaw, Traveler traveler)
+    private static double ApplyLastStandBonus(double baseRaw, Traveler traveler)
     {
+        // La división entre enteros trunca automáticamente los decimales hacia cero
+        // cumpliendo la regla de "(porcentaje truncado)" de manera perfecta.
         int missingPct = (traveler.Stats.HP - traveler.CurrentHP) * 100 / traveler.Stats.HP;
-        return (int)Math.Floor(baseRaw * missingPct * 0.03);
+        
+        // Retornamos un double para no perder precisión en el multiplicador de daño
+        // antes de que pase al ApplyDamageMultipliers final.
+        return baseRaw * missingPct * 0.03;
     }
 
     private static int ApplyDamageMultipliers(double baseRaw, bool isWeakness, bool isBreakingPoint)
