@@ -1,6 +1,9 @@
+using System.Text.Json.Serialization;
+
 namespace Octopath_Traveler.Models;
 
 public class Skill
 {
-    public string Name { get; set; }
+    [JsonPropertyName("Name")]
+    public string Name { get; init; } = string.Empty;
 }

@@ -8,47 +8,79 @@ public class Traveler : Unit
     private const int InitialBp = 1;
     private const int MaxBp = 5;
 
-    public List<string> Weapons { get; set; } = new List<string>();
-    public List<string> Skills { get; set; } = new List<string>();
-    public List<string> PassiveSkills { get; set; } = new List<string>();
+    public List<string> Weapons { get; init; } = new();
+    public List<string> Skills { get; init; } = new();
+    public List<string> PassiveSkills { get; init; } = new();
 
-    public int CurrentSP { get; private set; }
-    public int CurrentBP { get; private set; }
-    public bool IsDefending { get; set; }
-    public bool SpearheadNextRound { get; set; }
-    public bool IsDefenderNextRound { get; set; }
+    public int CurrentSp { get; private set; }
+    public int CurrentBp { get; private set; }
+    
+    public bool IsDefending { get; private set; }
+    public bool HasPriorityNextRound { get; private set; }
+    public bool DefendedLastRound { get; private set; }
 
     public override void InitializeState()
     {
         base.InitializeState();
-        CurrentSP = Stats.SP;
-        CurrentBP = InitialBp;
-        IsDefending = false;
-        SpearheadNextRound = false;
-        IsDefenderNextRound = false;
+        CurrentSp = Stats.Sp;
+        CurrentBp = InitialBp;
+        ClearCombatStates();
     }
 
-    public void RecoverBP()
+    public void RecoverBp()
     {
-        if (CurrentBP < MaxBp)
-            CurrentBP++;
+        if (CurrentBp < MaxBp)
+            CurrentBp++;
     }
 
-    public void SpendSP(int amount)
+    public void SpendSp(int amount)
     {
-        CurrentSP = Math.Max(0, CurrentSP - amount);
+        if (amount < 0) return;
+        CurrentSp = Math.Max(0, CurrentSp - amount);
     }
     
+    public void SpendBp(int amount)
+    {
+        if (amount < 0) return;
+        CurrentBp = Math.Max(0, CurrentBp - amount);
+    }
+
+    public void SetDefending()
+    {
+        IsDefending = true;
+    }
+
+    public void SetPriorityNextRound()
+    {
+        HasPriorityNextRound = true;
+    }
+
+    public void ConsumeTurnStartStates()
+    {
+        HasPriorityNextRound = false;
+        DefendedLastRound = false;
+    }
+
+    public void ResetDefenseForNewRound()
+    {
+        DefendedLastRound = IsDefending;
+        IsDefending = false;
+    }
+
+    public void ClearCombatStates()
+    {
+        IsDefending = false;
+        HasPriorityNextRound = false;
+        DefendedLastRound = false;
+    }
+
     public override void TakeDamage(int damage)
     {
-        base.TakeDamage(damage); // Aplica la reducción de HP normal
+        base.TakeDamage(damage); 
         
-        // Si después del daño el viajero muere, limpiamos sus turnos
         if (IsDead)
         {
-            IsDefending = false;
-            SpearheadNextRound = false;
-            IsDefenderNextRound = false;
+            ClearCombatStates();
         }
     }
 }

@@ -4,14 +4,24 @@ namespace Octopath_Traveler.Models;
 
 public class Stats
 {
-    public int HP { get; set; }
-    public int SP { get; set; }
-    public int PhysAtk { get; set; }
+    [JsonPropertyName("HP")]
+    public int Hp { get; set; }
+
+    [JsonPropertyName("SP")]
+    public int Sp { get; set; }
+
+    [JsonPropertyName("PhysAtk")]
+    public int PhysicalAttack { get; set; }
     
     [JsonPropertyName("PhysDef")]
-    public int PhysDef { get; set; }
+    public int PhysicalDefense { get; set; }
     
-    public int ElemAtk { get; set; }
-    public int ElemDef { get; set; }
+    [JsonPropertyName("ElemAtk")]
+    public int ElementalAttack { get; set; }
+    
+    [JsonPropertyName("ElemDef")]
+    public int ElementalDefense { get; set; }
+    
+    [JsonPropertyName("Speed")]
     public int Speed { get; set; }
 }

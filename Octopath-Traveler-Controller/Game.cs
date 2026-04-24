@@ -1,4 +1,5 @@
 using Octopath_Traveler_View;
+using Octopath_Traveler.Controllers;
 using Octopath_Traveler.Data;
 using Octopath_Traveler.Models;
 
@@ -6,78 +7,116 @@ namespace Octopath_Traveler;
 
 public class Game
 {
+    private const string CharactersPath = "data/characters.json";
+    private const string EnemiesPath = "data/enemies.json";
+    private const string ActiveSkillsPath = "data/skills.json";
+    private const string BeastSkillsPath = "data/beast_skills.json";
+    private const string PassiveSkillsPath = "data/passive_skills.json";
+
     private readonly View _view;
     private readonly string _teamsFolder;
+    private readonly JsonDataLoader _jsonLoader;
 
     public Game(View view, string teamsFolder)
     {
         _view = view;
         _teamsFolder = teamsFolder;
+        _jsonLoader = new JsonDataLoader();
     }
 
     public void Play()
     {
-        string selectedFile = PromptTeamSelection();
-        if (selectedFile == null)
+        string? selectedFile = GetTeamFileFromUser();
+        if (selectedFile == null) return;
+
+        try
+        {
+            var data = LoadGameData();
+            var teams = LoadTeams(selectedFile, data);
+            
+            StartCombat(teams, data);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException || ex is InvalidDataException)
         {
             _view.WriteLine("Archivo de equipos no válido");
-            return;
         }
-
-        var data = LoadGameData();
-        var teams = LoadTeams(selectedFile, data);
-        if (teams == null)
-        {
-            _view.WriteLine("Archivo de equipos no válido");
-            return;
-        }
-
-        var combatManager = new CombatManager(
-            _view,
-            teams.Value.playerTeam,
-            teams.Value.enemyTeam,
-            data.activeSkills,
-            data.beastSkills
-        );
-        combatManager.StartCombat();
     }
 
-    private string PromptTeamSelection()
+    private string? GetTeamFileFromUser()
+    {
+        var files = GetAvailableTeamFiles();
+        if (!files.Any())
+        {
+            _view.WriteLine("No se encontraron archivos de equipo.");
+            return null;
+        }
+
+        DisplayFileOptions(files);
+        return ReadAndValidateUserSelection(files);
+    }
+
+    private string[] GetAvailableTeamFiles()
+    {
+        if (!Directory.Exists(_teamsFolder)) return Array.Empty<string>();
+        return Directory.GetFiles(_teamsFolder, "*.txt").OrderBy(f => f).ToArray();
+    }
+
+    private void DisplayFileOptions(string[] files)
     {
         _view.WriteLine("Elige un archivo para cargar los equipos");
-
-        string[] files = Directory.GetFiles(_teamsFolder, "*.txt").OrderBy(f => f).ToArray();
-
         for (int i = 0; i < files.Length; i++)
+        {
             _view.WriteLine($"{i}: {Path.GetFileName(files[i])}");
+        }
+    }
 
+    private string? ReadAndValidateUserSelection(string[] files)
+    {
         string input = _view.ReadLine();
 
         if (int.TryParse(input, out int selectedIndex) && selectedIndex >= 0 && selectedIndex < files.Length)
+        {
             return files[selectedIndex];
+        }
 
+        _view.WriteLine("Selección inválida o cancelada.");
         return null;
     }
 
-    private (List<ActiveSkill> activeSkills, List<BeastSkill> beastSkills) LoadGameData()
+    private (List<ActiveSkill> ActiveSkills, List<BeastSkill> BeastSkills) LoadGameData()
     {
-        var jsonLoader = new JsonDataLoader();
-        var activeSkills = jsonLoader.LoadActiveSkills("data/skills.json");
-        var beastSkills = jsonLoader.LoadBeastSkills("data/beast_skills.json");
+        var activeSkills = _jsonLoader.Load<List<ActiveSkill>>(ActiveSkillsPath);
+        var beastSkills = _jsonLoader.Load<List<BeastSkill>>(BeastSkillsPath);
         return (activeSkills, beastSkills);
     }
 
-    private (List<Traveler> playerTeam, List<Beast> enemyTeam)? LoadTeams(
-        string selectedFile,
-        (List<ActiveSkill> activeSkills, List<BeastSkill> beastSkills) data)
+    private (List<Traveler> PlayerTeam, List<Beast> EnemyTeam) LoadTeams(
+        string selectedFile, 
+        (List<ActiveSkill> ActiveSkills, List<BeastSkill> BeastSkills) data)
     {
-        var jsonLoader = new JsonDataLoader();
-        var characters = jsonLoader.LoadTravelers("data/characters.json");
-        var enemies = jsonLoader.LoadBeasts("data/enemies.json");
-        var activeSkillNames = data.activeSkills.Select(s => s.Name).ToList();
-        var passiveSkillNames = jsonLoader.LoadSkillNames("data/passive_skills.json");
+        var characters = _jsonLoader.Load<List<Traveler>>(CharactersPath);
+        var enemies = _jsonLoader.Load<List<Beast>>(EnemiesPath);
+        var passiveSkillsData = _jsonLoader.Load<List<Skill>>(PassiveSkillsPath);
+        
+        var activeSkillNames = data.ActiveSkills.Select(s => s.Name).ToList();
+        var passiveSkillNames = passiveSkillsData.Select(s => s.Name).ToList();
 
         var teamLoader = new TeamLoader(characters, enemies, activeSkillNames, passiveSkillNames);
         return teamLoader.LoadTeamFrom(selectedFile);
+    }
+
+    private void StartCombat(
+        (List<Traveler> PlayerTeam, List<Beast> EnemyTeam) teams, 
+        (List<ActiveSkill> ActiveSkills, List<BeastSkill> BeastSkills) data)
+    {
+        var combatManager = new CombatManager(
+            _view,
+            teams.PlayerTeam,
+            teams.EnemyTeam,
+            data.ActiveSkills,
+            data.BeastSkills
+        );
+            
+        combatManager.StartCombat();
     }
 }

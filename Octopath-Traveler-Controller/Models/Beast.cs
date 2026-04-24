@@ -4,16 +4,17 @@ using System.Collections.Generic;
 
 public class Beast : Unit
 {
-    public string Skill { get; set; }
-    public int Shields { get; set; }
-    public List<string> Weaknesses { get; set; } = new List<string>();
+    public string Skill { get; init; } = string.Empty;
+    public int Shields { get; init; }
+    public List<string> Weaknesses { get; init; } = new();
 
     public int CurrentShields { get; private set; }
     public int BreakingPointRoundsRemaining { get; private set; }
-    public int LegHoldRoundsRemaining { get; private set; }
+    
+    public int DesprioritizationRoundsRemaining { get; private set; }
 
     public bool IsInBreakingPoint => BreakingPointRoundsRemaining > 0;
-    public bool IsLegHolded => LegHoldRoundsRemaining > 0;
+    public bool IsDesprioritized => DesprioritizationRoundsRemaining > 0;
     public bool JustRecoveredFromBreakingPoint { get; private set; }
 
     public override void InitializeState()
@@ -21,16 +22,23 @@ public class Beast : Unit
         base.InitializeState();
         CurrentShields = Shields;
         BreakingPointRoundsRemaining = 0;
-        LegHoldRoundsRemaining = 0;
+        DesprioritizationRoundsRemaining = 0;
+        JustRecoveredFromBreakingPoint = false;
     }
 
     public void DecrementShield()
     {
-        if (CurrentShields > 0)
+        if (CurrentShields > 0 && !IsInBreakingPoint) 
+        {
             CurrentShields--;
+            if (CurrentShields == 0)
+            {
+                TriggerBreakingPoint();
+            }
+        }
     }
 
-    public void TriggerBreakingPoint()
+    private void TriggerBreakingPoint()
     {
         BreakingPointRoundsRemaining = 2;
     }
@@ -48,16 +56,19 @@ public class Beast : Unit
         }
     }
 
-    public void ApplyLegHold(int rounds)
+    public void ApplyDesprioritization(int rounds)
     {
-        LegHoldRoundsRemaining += rounds;
+        DesprioritizationRoundsRemaining += rounds;
     }
 
-    public void DecrementLegHold()
+    public void DecrementDesprioritization()
     {
-        if (LegHoldRoundsRemaining > 0)
-            LegHoldRoundsRemaining--;
+        if (DesprioritizationRoundsRemaining > 0)
+            DesprioritizationRoundsRemaining--;
     }
 
-    public void ClearRecovery() => JustRecoveredFromBreakingPoint = false;
+    public void ClearRecovery()
+    {
+        JustRecoveredFromBreakingPoint = false;
+    }
 }

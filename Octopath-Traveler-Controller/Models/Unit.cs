@@ -4,30 +4,32 @@ using System;
 
 public abstract class Unit
 {
-    public string Name { get; set; }
-    public Stats Stats { get; set; }
+    public string Name { get; init; } = string.Empty;
+    public Stats Stats { get; init; } = new();
 
-    public int CurrentHP { get; protected set; }
+    public int CurrentHp { get; protected set; }
 
-    public bool IsDead => CurrentHP <= 0;
+    public bool IsDead => CurrentHp <= 0;
 
     public virtual void InitializeState()
     {
-        CurrentHP = Stats.HP;
+        CurrentHp = Stats.Hp; 
     }
 
     public virtual void TakeDamage(int damage)
     {
-        CurrentHP = Math.Max(0, CurrentHP - damage);
+        if (damage < 0) return;
+        CurrentHp = Math.Max(0, CurrentHp - damage);
     }
 
-    public void Heal(int amount)
+    public virtual void Heal(int amount)
     {
-        CurrentHP = Math.Min(Stats.HP, CurrentHP + amount);
+        if (amount < 0) return;
+        CurrentHp = Math.Min(Stats.Hp, CurrentHp + amount);
     }
 
-    public void Revive()
+    public virtual void Revive()
     {
-        CurrentHP = 1;
+        CurrentHp = 1;
     }
 }

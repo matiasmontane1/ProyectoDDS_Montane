@@ -1,32 +1,28 @@
 namespace Octopath_Traveler.Models;
 
-public class BeastSkill
+public class BeastSkill : Skill
 {
-    public string Name { get; set; }
-    public double Modifier { get; set; }
-    public string Description { get; set; }
-    public string Target { get; set; }
-    public int Hits { get; set; }
+    public double Modifier { get; init; }
+    public string Description { get; init; } = string.Empty;
+    public string Target { get; init; } = string.Empty;
+    public int Hits { get; init; }
 
     public bool IsAoe => Target == "Enemies";
-    public bool IsPhysical => Description?.Contains("físico") == true;
-    public bool IsVortalClaw => Description?.Contains("mitad el HP") == true;
+    public bool IsPhysical => Description.Contains("físico");
+    public bool IsVortalClaw => Description.Contains("mitad el HP");
     public bool IsNonDamaging => Modifier == 0 && !IsVortalClaw;
 
-    public string TargetCriteria
+    public string TargetCriteria => Description switch
     {
-        get
-        {
-            if (Description == null) return "MaxHP";
-            if (Description.Contains("mayor HP")) return "MaxHP";
-            if (Description.Contains("mayor Elem Atk")) return "MaxElemAtk";
-            if (Description.Contains("menor Phys Def")) return "MinPhysDef";
-            if (Description.Contains("mayor Speed")) return "MaxSpeed";
-            if (Description.Contains("menor Elem Def")) return "MinElemDef";
-            if (Description.Contains("mayor Phys Def")) return "MaxPhysDef";
-            if (Description.Contains("mayor Phys Atk")) return "MaxPhysAtk";
-            if (Description.Contains("menor Speed")) return "MinSpeed";
-            return "MaxHP";
-        }
-    }
+        var d when string.IsNullOrEmpty(d) => "MaxHP",
+        var d when d.Contains("mayor HP") => "MaxHP",
+        var d when d.Contains("mayor ElemAtk") || d.Contains("mayor Elem Atk") => "MaxElemAtk",
+        var d when d.Contains("menor PhysDef") || d.Contains("menor Phys Def") => "MinPhysDef",
+        var d when d.Contains("mayor Speed") => "MaxSpeed",
+        var d when d.Contains("menor ElemDef") || d.Contains("menor Elem Def") => "MinElemDef",
+        var d when d.Contains("mayor PhysDef") || d.Contains("mayor Phys Def") => "MaxPhysDef",
+        var d when d.Contains("mayor PhysAtk") || d.Contains("mayor Phys Atk") => "MaxPhysAtk",
+        var d when d.Contains("menor Speed") => "MinSpeed",
+        _ => "MaxHP"
+    };
 }
