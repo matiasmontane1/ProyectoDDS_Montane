@@ -19,20 +19,20 @@ public class BeastTurnController
     public void HandleTurn(Beast beast)
     {
         beast.ClearRecovery();
-        var skill = _beastSkills.FirstOrDefault(s => s.Name == beast.Skill);
-        if (skill == null) return;
+        var beastSkill = _beastSkills.FirstOrDefault(skill => skill.Name == beast.Skill);
+        if (beastSkill == null) return;
 
         _view.ShowUnitUsesSkill(beast.Name, beast.Skill);
 
-        if (skill.IsVortalClaw)  { ExecuteVortalClaw(); return; }
-        if (skill.IsNonDamaging) return;
-        if (skill.IsAoe)         ExecuteAoeSkill(beast, skill);
-        else                     ExecuteSingleTargetSkill(beast, skill);
+        if (beastSkill.IsVortalClaw)  { ExecuteVortalClaw(); return; }
+        if (beastSkill.IsNonDamaging) return;
+        if (beastSkill.IsAoe)         ExecuteAoeSkill(beast, beastSkill);
+        else                          ExecuteSingleTargetSkill(beast, beastSkill);
     }
 
     private void ExecuteVortalClaw()
     {
-        var targets = _playerTeam.Where(t => !t.IsDead).ToList();
+        var targets = _playerTeam.Where(traveler => !traveler.IsDead).ToList();
         foreach (var target in targets)
         {
             int newHp = (int)Math.Floor(target.CurrentHp / 2.0);
@@ -44,28 +44,29 @@ public class BeastTurnController
             _view.ShowFinalHp(target.Name, target.CurrentHp);
     }
 
-    private void ExecuteAoeSkill(Beast beast, BeastSkill skill)
+    private void ExecuteAoeSkill(Beast beast, BeastSkill beastSkill)
     {
-        var targets = _playerTeam.Where(t => !t.IsDead).ToList();
+        var targets = _playerTeam.Where(traveler => !traveler.IsDead).ToList();
         foreach (var target in targets)
-            ApplyBeastAttack(beast, target, skill);
+            ApplyBeastAttack(beast, target, beastSkill);
         foreach (var target in targets)
             _view.ShowFinalHp(target.Name, target.CurrentHp);
     }
 
-    private void ExecuteSingleTargetSkill(Beast beast, BeastSkill skill)
+    private void ExecuteSingleTargetSkill(Beast beast, BeastSkill beastSkill)
     {
-        var target = SelectTarget(skill);
+        var target = SelectTarget(beastSkill);
         if (target == null) return;
-        ApplyBeastAttack(beast, target, skill);
+        ApplyBeastAttack(beast, target, beastSkill);
         _view.ShowFinalHp(target.Name, target.CurrentHp);
     }
 
-    private void ApplyBeastAttack(Beast beast, Traveler target, BeastSkill skill)
+    private void ApplyBeastAttack(Beast beast, Traveler target, BeastSkill beastSkill)
     {
-        int damage = skill.IsPhysical
-            ? DamageCalculator.CalculatePhysicalDamage(beast.Stats.PhysicalAttack, skill.Modifier, target.Stats.PhysicalDefense, false, false)
-            : DamageCalculator.CalculateElementalDamage(beast.Stats.ElementalAttack, skill.Modifier, target.Stats.ElementalDefense, false, false);
+        var noBonuses = new DamageContext(IsWeakness: false, IsBreakingPoint: false);
+        int damage = beastSkill.IsPhysical
+            ? DamageCalculator.CalculatePhysicalDamage(new DamageInput(beast.Stats.PhysicalAttack, beastSkill.Modifier, target.Stats.PhysicalDefense), noBonuses)
+            : DamageCalculator.CalculateElementalDamage(new DamageInput(beast.Stats.ElementalAttack, beastSkill.Modifier, target.Stats.ElementalDefense), noBonuses);
 
         if (target.IsDefending)
         {
@@ -74,24 +75,24 @@ public class BeastTurnController
         }
 
         target.TakeDamage(damage);
-        _view.ShowBeastDamage(target.Name, damage, skill.IsPhysical);
+        _view.ShowBeastDamage(target.Name, damage, beastSkill.IsPhysical);
     }
 
-    private Traveler? SelectTarget(BeastSkill skill)
+    private Traveler? SelectTarget(BeastSkill beastSkill)
     {
-        var alive = _playerTeam.Where(t => !t.IsDead).ToList();
-        if (alive.Count == 0) return null;
+        var aliveTravelers = _playerTeam.Where(traveler => !traveler.IsDead).ToList();
+        if (aliveTravelers.Count == 0) return null;
 
-        return skill.TargetCriteria switch
+        return beastSkill.TargetCriteria switch
         {
-            "MaxElemAtk" => alive.OrderByDescending(t => t.Stats.ElementalAttack).ThenBy(t => _playerTeam.IndexOf(t)).First(),
-            "MinPhysDef" => alive.OrderBy(t => t.Stats.PhysicalDefense).ThenBy(t => _playerTeam.IndexOf(t)).First(),
-            "MaxSpeed"   => alive.OrderByDescending(t => t.Stats.Speed).ThenBy(t => _playerTeam.IndexOf(t)).First(),
-            "MinElemDef" => alive.OrderBy(t => t.Stats.ElementalDefense).ThenBy(t => _playerTeam.IndexOf(t)).First(),
-            "MaxPhysDef" => alive.OrderByDescending(t => t.Stats.PhysicalDefense).ThenBy(t => _playerTeam.IndexOf(t)).First(),
-            "MaxPhysAtk" => alive.OrderByDescending(t => t.Stats.PhysicalAttack).ThenBy(t => _playerTeam.IndexOf(t)).First(),
-            "MinSpeed"   => alive.OrderBy(t => t.Stats.Speed).ThenBy(t => _playerTeam.IndexOf(t)).First(),
-            _            => alive.OrderByDescending(t => t.CurrentHp).ThenBy(t => _playerTeam.IndexOf(t)).First(),
+            "MaxElemAtk" => aliveTravelers.OrderByDescending(traveler => traveler.Stats.ElementalAttack).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
+            "MinPhysDef" => aliveTravelers.OrderBy(traveler => traveler.Stats.PhysicalDefense).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
+            "MaxSpeed"   => aliveTravelers.OrderByDescending(traveler => traveler.Stats.Speed).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
+            "MinElemDef" => aliveTravelers.OrderBy(traveler => traveler.Stats.ElementalDefense).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
+            "MaxPhysDef" => aliveTravelers.OrderByDescending(traveler => traveler.Stats.PhysicalDefense).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
+            "MaxPhysAtk" => aliveTravelers.OrderByDescending(traveler => traveler.Stats.PhysicalAttack).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
+            "MinSpeed"   => aliveTravelers.OrderBy(traveler => traveler.Stats.Speed).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
+            _            => aliveTravelers.OrderByDescending(traveler => traveler.CurrentHp).ThenBy(traveler => _playerTeam.IndexOf(traveler)).First(),
         };
     }
 }

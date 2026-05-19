@@ -1,10 +1,14 @@
+using System.Text.Json.Serialization;
+
 namespace Octopath_Traveler.Models;
 
 public class BeastSkill : Skill
 {
     public double Modifier { get; init; }
-    public string Description { get; init; } = string.Empty;
-    public string Target { get; init; } = string.Empty;
+    [JsonInclude]
+    private string Description { get; init; } = string.Empty;
+    [JsonInclude]
+    private string Target { get; init; } = string.Empty;
     public int Hits { get; init; }
 
     public bool IsAoe => Target == "Enemies";
@@ -14,15 +18,15 @@ public class BeastSkill : Skill
 
     public string TargetCriteria => Description switch
     {
-        var d when string.IsNullOrEmpty(d) => "MaxHP",
-        var d when d.Contains("mayor HP") => "MaxHP",
-        var d when d.Contains("mayor ElemAtk") || d.Contains("mayor Elem Atk") => "MaxElemAtk",
-        var d when d.Contains("menor PhysDef") || d.Contains("menor Phys Def") => "MinPhysDef",
-        var d when d.Contains("mayor Speed") => "MaxSpeed",
-        var d when d.Contains("menor ElemDef") || d.Contains("menor Elem Def") => "MinElemDef",
-        var d when d.Contains("mayor PhysDef") || d.Contains("mayor Phys Def") => "MaxPhysDef",
-        var d when d.Contains("mayor PhysAtk") || d.Contains("mayor Phys Atk") => "MaxPhysAtk",
-        var d when d.Contains("menor Speed") => "MinSpeed",
+        var description when string.IsNullOrEmpty(description) => "MaxHP",
+        var description when description.Contains("mayor HP") => "MaxHP",
+        var description when description.Contains("mayor ElemAtk") || description.Contains("mayor Elem Atk") => "MaxElemAtk",
+        var description when description.Contains("menor PhysDef") || description.Contains("menor Phys Def") => "MinPhysDef",
+        var description when description.Contains("mayor Speed") => "MaxSpeed",
+        var description when description.Contains("menor ElemDef") || description.Contains("menor Elem Def") => "MinElemDef",
+        var description when description.Contains("mayor PhysDef") || description.Contains("mayor Phys Def") => "MaxPhysDef",
+        var description when description.Contains("mayor PhysAtk") || description.Contains("mayor Phys Atk") => "MaxPhysAtk",
+        var description when description.Contains("menor Speed") => "MinSpeed",
         _ => "MaxHP"
     };
 }

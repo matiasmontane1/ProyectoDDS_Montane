@@ -45,7 +45,7 @@ public class TeamLoader
 
     private (List<Traveler> PlayerTeam, List<Beast> EnemyTeam) ParseTeamsFromLines(string[] lines)
     {
-        var cleanedLines = lines.Select(l => l.Trim()).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+        var cleanedLines = lines.Select(rawLine => rawLine.Trim()).Where(trimmedLine => !string.IsNullOrWhiteSpace(trimmedLine)).ToList();
 
         var playerLines = ExtractSection(cleanedLines, "Player Team", "Enemy Team");
         var enemyLines = ExtractSection(cleanedLines, "Enemy Team", null);
@@ -101,7 +101,7 @@ public class TeamLoader
 
     private void AddBeastToTeam(string beastName, List<Beast> team, HashSet<string> trackedNames)
     {
-        Beast? baseBeast = _availableBeasts.FirstOrDefault(b => b.Name == beastName);
+        Beast? baseBeast = _availableBeasts.FirstOrDefault(beast => beast.Name == beastName);
 
         if (baseBeast == null)
         {
@@ -137,7 +137,7 @@ public class TeamLoader
     private Traveler ParseTraveler(string line)
     {
         string name = ExtractTravelerName(line);
-        Traveler? baseTraveler = _availableTravelers.FirstOrDefault(t => t.Name == name);
+        Traveler? baseTraveler = _availableTravelers.FirstOrDefault(traveler => traveler.Name == name);
 
         if (baseTraveler == null)
         {
@@ -184,7 +184,7 @@ public class TeamLoader
         string content = ExtractTextBetween(line, open, close);
         if (string.IsNullOrWhiteSpace(content)) return new List<string>();
 
-        var skills = content.Split(',').Select(s => s.Trim()).ToList();
+        var skills = content.Split(',').Select(skillName => skillName.Trim()).ToList();
     
         ValidateParsedSkills(skills, maxAllowed, validDatabase, line);
 

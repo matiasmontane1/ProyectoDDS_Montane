@@ -10,7 +10,8 @@ public class ActiveSkill : Skill
     public string Type { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
     public double Modifier { get; init; }
-    public string Description { get; init; } = string.Empty;
+    [JsonInclude]
+    private string Description { get; init; } = string.Empty;
 
     private static readonly HashSet<string> PhysicalWeaponTypes = new()
     { 

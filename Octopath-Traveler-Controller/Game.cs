@@ -14,12 +14,14 @@ public class Game
     private const string PassiveSkillsPath = "data/passive_skills.json";
 
     private readonly View _view;
+    private readonly GameView _gameView;
     private readonly string _teamsFolder;
     private readonly JsonDataLoader _jsonLoader;
 
     public Game(View view, string teamsFolder)
     {
         _view = view;
+        _gameView = new GameView(view);
         _teamsFolder = teamsFolder;
         _jsonLoader = new JsonDataLoader();
     }
@@ -33,7 +35,7 @@ public class Game
         {
             var data = LoadGameData();
             var teams = LoadTeams(selectedFile, data);
-            
+
             StartCombat(teams, data);
         }
         catch (Exception ex) when (ex is FileNotFoundException || ex is InvalidDataException)
@@ -47,7 +49,7 @@ public class Game
         var files = GetAvailableTeamFiles();
         if (!files.Any())
         {
-            _view.WriteLine("No se encontraron archivos de equipo.");
+            _gameView.ShowNoTeamFilesFound();
             return null;
         }
 
@@ -58,28 +60,28 @@ public class Game
     private string[] GetAvailableTeamFiles()
     {
         if (!Directory.Exists(_teamsFolder)) return Array.Empty<string>();
-        return Directory.GetFiles(_teamsFolder, "*.txt").OrderBy(f => f).ToArray();
+        return Directory.GetFiles(_teamsFolder, "*.txt").OrderBy(file => file).ToArray();
     }
 
     private void DisplayFileOptions(string[] files)
     {
-        _view.WriteLine("Elige un archivo para cargar los equipos");
-        for (int i = 0; i < files.Length; i++)
+        _gameView.ShowTeamFilePrompt();
+        for (int index = 0; index < files.Length; index++)
         {
-            _view.WriteLine($"{i}: {Path.GetFileName(files[i])}");
+            _gameView.ShowFileOption(index, Path.GetFileName(files[index]));
         }
     }
 
     private string? ReadAndValidateUserSelection(string[] files)
     {
-        string input = _view.ReadLine();
+        string input = _gameView.ReadLine();
 
         if (int.TryParse(input, out int selectedIndex) && selectedIndex >= 0 && selectedIndex < files.Length)
         {
             return files[selectedIndex];
         }
 
-        _view.WriteLine("Selección inválida o cancelada.");
+        _gameView.ShowInvalidSelection();
         return null;
     }
 
@@ -91,22 +93,22 @@ public class Game
     }
 
     private (List<Traveler> PlayerTeam, List<Beast> EnemyTeam) LoadTeams(
-        string selectedFile, 
+        string selectedFile,
         (List<ActiveSkill> ActiveSkills, List<BeastSkill> BeastSkills) data)
     {
         var characters = _jsonLoader.Load<List<Traveler>>(CharactersPath);
         var enemies = _jsonLoader.Load<List<Beast>>(EnemiesPath);
         var passiveSkillsData = _jsonLoader.Load<List<Skill>>(PassiveSkillsPath);
-        
-        var activeSkillNames = data.ActiveSkills.Select(s => s.Name).ToList();
-        var passiveSkillNames = passiveSkillsData.Select(s => s.Name).ToList();
+
+        var activeSkillNames = data.ActiveSkills.Select(skill => skill.Name).ToList();
+        var passiveSkillNames = passiveSkillsData.Select(skill => skill.Name).ToList();
 
         var teamLoader = new TeamLoader(characters, enemies, activeSkillNames, passiveSkillNames);
         return teamLoader.LoadTeamFrom(selectedFile);
     }
 
     private void StartCombat(
-        (List<Traveler> PlayerTeam, List<Beast> EnemyTeam) teams, 
+        (List<Traveler> PlayerTeam, List<Beast> EnemyTeam) teams,
         (List<ActiveSkill> ActiveSkills, List<BeastSkill> BeastSkills) data)
     {
         var combatManager = new CombatManager(
@@ -116,7 +118,7 @@ public class Game
             data.ActiveSkills,
             data.BeastSkills
         );
-            
+
         combatManager.StartCombat();
     }
 }

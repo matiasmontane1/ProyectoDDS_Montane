@@ -24,9 +24,8 @@ public class TurnQueueManager
 
     public List<Unit> GenerateNextRoundPreview(List<Unit> currentRemainingQueue)
     {
-        var recoveryFirst = _enemyTeam
-            .Where(b => !b.IsDead && b.BreakingPointRoundsRemaining == 1)
-            .Select(b => ((Unit)b, false, _enemyTeam.IndexOf(b)));
+        var recoveringBeasts = _enemyTeam.Where(beast => !beast.IsDead && beast.BreakingPointRoundsRemaining == 1);
+        var recoveryFirst = recoveringBeasts.Select(beast => ((Unit)beast, false, _enemyTeam.IndexOf(beast)));
 
         var defenderFirst = GetDefenderFirst(excludeActed: true, nextRound: true, currentRemainingQueue);
         var spearheadFirst = GetSpearheadFirst(excludeActed: true, nextRound: true, currentRemainingQueue);
@@ -36,54 +35,89 @@ public class TurnQueueManager
         return CompileQueue(recoveryFirst, defenderFirst, spearheadFirst, normal, legholded);
     }
 
-    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetRecoveryFirst() => _enemyTeam
-        .Where(b => !b.IsDead && b.JustRecoveredFromBreakingPoint)
-        .Select(b => ((Unit)b, false, _enemyTeam.IndexOf(b)));
+    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetRecoveryFirst()
+    {
+        var justRecoveredBeasts = _enemyTeam.Where(beast => !beast.IsDead && beast.JustRecoveredFromBreakingPoint);
+        return justRecoveredBeasts.Select(beast => ((Unit)beast, false, _enemyTeam.IndexOf(beast)));
+    }
 
-    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetDefenderFirst(bool excludeActed, bool nextRound, List<Unit>? queue = null) => _playerTeam
-        .Where(t => (nextRound ? t.IsDefending : t.DefendedLastRound) && !t.IsDead && (!excludeActed || queue == null || !queue.Contains(t)))
-        .Select(t => ((Unit)t, true, _playerTeam.IndexOf(t)));
+    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetDefenderFirst(bool excludeActed, bool nextRound, List<Unit>? queue = null)
+    {
+        var eligibleDefenders = _playerTeam.Where(traveler => IsEligibleDefender(traveler, nextRound, excludeActed, queue));
+        return eligibleDefenders.Select(traveler => ((Unit)traveler, true, _playerTeam.IndexOf(traveler)));
+    }
 
-    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetSpearheadFirst(bool excludeActed, bool nextRound, List<Unit>? queue = null) => _playerTeam
-        .Where(t => t.HasPriorityNextRound && !(nextRound ? t.IsDefending : t.DefendedLastRound) && !t.IsDead && (!excludeActed || queue == null || !queue.Contains(t)))
-        .Select(t => ((Unit)t, true, _playerTeam.IndexOf(t)));
+    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetSpearheadFirst(bool excludeActed, bool nextRound, List<Unit>? queue = null)
+    {
+        var eligibleSpearheads = _playerTeam.Where(traveler => IsEligibleSpearhead(traveler, nextRound, excludeActed, queue));
+        return eligibleSpearheads.Select(traveler => ((Unit)traveler, true, _playerTeam.IndexOf(traveler)));
+    }
 
     private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetNormalQueue(bool excludeActed, bool nextRound, List<Unit>? queue = null)
     {
-        var travelers = _playerTeam
-            .Where(t => !(t.HasPriorityNextRound && (!excludeActed || queue == null || !queue.Contains(t))) && !t.IsDead)
-            .Select(t => ((Unit)t, true, _playerTeam.IndexOf(t)));
+        var normalTravelers = _playerTeam.Where(traveler => IsNormalQueueTraveler(traveler, excludeActed, queue));
+        var travelerEntries = normalTravelers.Select(traveler => ((Unit)traveler, true, _playerTeam.IndexOf(traveler)));
 
-        var beasts = _enemyTeam
-            .Where(b => !b.IsDead && 
-                        (nextRound ? b.BreakingPointRoundsRemaining == 0 : (!b.IsInBreakingPoint && !b.JustRecoveredFromBreakingPoint)) &&
-                        (nextRound ? !(b.IsDesprioritized && b.DesprioritizationRoundsRemaining > 1) : !b.IsDesprioritized))
-            .Select(b => ((Unit)b, false, _enemyTeam.IndexOf(b)));
+        var normalBeasts = _enemyTeam.Where(beast => IsNormalQueueBeast(beast, nextRound));
+        var beastEntries = normalBeasts.Select(beast => ((Unit)beast, false, _enemyTeam.IndexOf(beast)));
 
-        return travelers.Concat(beasts);
+        return travelerEntries.Concat(beastEntries);
     }
 
-    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetDesprioritizedQueue(bool nextRound) => _enemyTeam
-        .Where(b => !b.IsDead && 
-                    (nextRound ? b.BreakingPointRoundsRemaining == 0 : (!b.IsInBreakingPoint && !b.JustRecoveredFromBreakingPoint)) && 
-                    (nextRound ? b.IsDesprioritized && b.DesprioritizationRoundsRemaining > 1 : b.IsDesprioritized))
-        .Select(b => ((Unit)b, false, _enemyTeam.IndexOf(b)));
+    private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetDesprioritizedQueue(bool nextRound)
+    {
+        var desprioritizedBeasts = _enemyTeam.Where(beast => IsDesprioritizedQueueBeast(beast, nextRound));
+        return desprioritizedBeasts.Select(beast => ((Unit)beast, false, _enemyTeam.IndexOf(beast)));
+    }
+
+    private static bool IsEligibleDefender(Traveler traveler, bool nextRound, bool excludeActed, List<Unit>? queue)
+    {
+        bool isCurrentlyDefending = nextRound ? traveler.IsDefending : traveler.DefendedLastRound;
+        bool hasNotActed = !excludeActed || queue == null || !queue.Contains(traveler);
+        return isCurrentlyDefending && !traveler.IsDead && hasNotActed;
+    }
+
+    private static bool IsEligibleSpearhead(Traveler traveler, bool nextRound, bool excludeActed, List<Unit>? queue)
+    {
+        bool isCurrentlyDefending = nextRound ? traveler.IsDefending : traveler.DefendedLastRound;
+        bool hasNotActed = !excludeActed || queue == null || !queue.Contains(traveler);
+        return traveler.HasPriorityNextRound && !isCurrentlyDefending && !traveler.IsDead && hasNotActed;
+    }
+
+    private static bool IsNormalQueueTraveler(Traveler traveler, bool excludeActed, List<Unit>? queue)
+    {
+        bool hasNotActed = !excludeActed || queue == null || !queue.Contains(traveler);
+        return !(traveler.HasPriorityNextRound && hasNotActed) && !traveler.IsDead;
+    }
+
+    private static bool IsNormalQueueBeast(Beast beast, bool nextRound)
+    {
+        bool isBreakingPointFree = nextRound ? beast.BreakingPointRoundsRemaining == 0 : (!beast.IsInBreakingPoint && !beast.JustRecoveredFromBreakingPoint);
+        bool isNotDesprioritized = nextRound ? !(beast.IsDesprioritized && beast.DesprioritizationRoundsRemaining > 1) : !beast.IsDesprioritized;
+        return !beast.IsDead && isBreakingPointFree && isNotDesprioritized;
+    }
+
+    private static bool IsDesprioritizedQueueBeast(Beast beast, bool nextRound)
+    {
+        bool isBreakingPointFree = nextRound ? beast.BreakingPointRoundsRemaining == 0 : (!beast.IsInBreakingPoint && !beast.JustRecoveredFromBreakingPoint);
+        bool isDesprioritized = nextRound ? beast.IsDesprioritized && beast.DesprioritizationRoundsRemaining > 1 : beast.IsDesprioritized;
+        return !beast.IsDead && isBreakingPointFree && isDesprioritized;
+    }
 
     private List<Unit> CompileQueue(params IEnumerable<(Unit Unit, bool IsTraveler, int Index)>[] segments)
     {
         var result = new List<Unit>();
-        
+
         foreach (var segment in segments)
         {
-            var sortedSegment = segment
-                .OrderByDescending(x => x.Unit.Stats.Speed)
-                .ThenByDescending(x => x.IsTraveler)
-                .ThenBy(x => x.Index)
-                .Select(x => x.Unit);
-            
-            result.AddRange(sortedSegment);
+            var orderedSegment = segment
+                .OrderByDescending(entry => entry.Unit.Stats.Speed)
+                .ThenByDescending(entry => entry.IsTraveler)
+                .ThenBy(entry => entry.Index);
+            var sortedUnits = orderedSegment.Select(entry => entry.Unit);
+            result.AddRange(sortedUnits);
         }
-        
+
         return result;
     }
 }

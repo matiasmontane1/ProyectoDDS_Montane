@@ -21,8 +21,6 @@ using Octopath_Traveler_View;
  *      var view = View.BuildConsoleView();
  */
 
-
-
 string testFolder = SelectTestFolder();
 string test = SelectTest(testFolder);
 string teamsFolder = testFolder.Replace("-Tests","");

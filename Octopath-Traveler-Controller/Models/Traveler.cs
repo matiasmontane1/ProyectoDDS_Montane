@@ -67,7 +67,7 @@ public class Traveler : Unit
         IsDefending = false;
     }
 
-    public void ClearCombatStates()
+    private void ClearCombatStates()
     {
         IsDefending = false;
         HasPriorityNextRound = false;
