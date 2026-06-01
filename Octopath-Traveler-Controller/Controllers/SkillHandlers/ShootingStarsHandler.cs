@@ -12,15 +12,17 @@ public class ShootingStarsHandler : SkillHandler
 
     public override bool Execute(Traveler caster, ActiveSkill skill, List<Unit> turnQueue)
     {
-        MenuView.PromptBpUsageIfAvailable(caster.CurrentBp);
+        int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
+        caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
 
+        double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
         var targets = GetAliveEnemies();
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
 
         foreach (var target in targets)
-            ApplyAllHits(caster, target, skill);
+            ApplyAllHits(caster, target, skill, effectiveModifier);
 
         foreach (var target in targets)
             View.ShowFinalHp(target.Name, target.CurrentHp);
@@ -28,12 +30,12 @@ public class ShootingStarsHandler : SkillHandler
         return true;
     }
 
-    private void ApplyAllHits(Traveler caster, Beast target, ActiveSkill skill)
+    private void ApplyAllHits(Traveler caster, Beast target, ActiveSkill skill, double effectiveModifier)
     {
         foreach (var hitType in HitTypes)
         {
             var singleHit = new ActiveSkill { Name = skill.Name, Type = hitType, Modifier = skill.Modifier };
-            ApplyOffensiveHit(caster, target, singleHit);
+            ApplyOffensiveHit(caster, target, singleHit, effectiveModifier);
         }
     }
 }

@@ -4,11 +4,11 @@ using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
 
-public class HealSkillHandler : SkillHandler
+public class BuffSkillHandler : SkillHandler
 {
     private readonly TravelerTargetSelector _targetSelector;
 
-    public HealSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, TravelerTargetSelector targetSelector)
+    public BuffSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, TravelerTargetSelector targetSelector)
         : base(view, menuView, playerTeam, enemyTeam)
     {
         _targetSelector = targetSelector;
@@ -23,24 +23,17 @@ public class HealSkillHandler : SkillHandler
         caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
 
-        double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
-        int healAmount = DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, effectiveModifier);
+        int effectiveDuration = skill.ComputeEffectiveDuration(skill.ExtractBaseDuration(), bpUsed);
+        IReadOnlyList<string> effectNames = skill.ExtractStatusEffectNames();
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
-        ApplyHeal(targets, healAmount);
+        foreach (var target in targets)
+            foreach (var effectName in effectNames)
+                View.ShowStatusEffect(target.Name, effectName, effectiveDuration);
+        foreach (var target in targets)
+            foreach (var effectName in effectNames)
+                target.ApplyStatusEffect(new StatusEffect(effectName, effectiveDuration));
 
         return true;
-    }
-
-    private void ApplyHeal(List<Traveler> targets, int healAmount)
-    {
-        foreach (var target in targets)
-        {
-            View.ShowHeal(target.Name, healAmount);
-            target.Heal(healAmount);
-        }
-
-        foreach (var target in targets)
-            View.ShowFinalHp(target.Name, target.CurrentHp);
     }
 }

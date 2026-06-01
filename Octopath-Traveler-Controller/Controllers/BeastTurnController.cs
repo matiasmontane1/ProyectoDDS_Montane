@@ -63,10 +63,12 @@ public class BeastTurnController
 
     private void ApplyBeastAttack(Beast beast, Traveler target, BeastSkill beastSkill)
     {
-        var noBonuses = new DamageContext(IsWeakness: false, IsBreakingPoint: false);
+        double attackMultiplier = beastSkill.IsPhysical ? beast.PhysicalAttackMultiplier : beast.ElementalAttackMultiplier;
+        double defenseMultiplier = beastSkill.IsPhysical ? target.PhysicalDefenseMultiplier : target.ElementalDefenseMultiplier;
+        var context = new DamageContext(IsWeakness: false, IsBreakingPoint: false, AttackMultiplier: attackMultiplier, DefenseMultiplier: defenseMultiplier);
         int damage = beastSkill.IsPhysical
-            ? DamageCalculator.CalculatePhysicalDamage(new DamageInput(beast.Stats.PhysicalAttack, beastSkill.Modifier, target.Stats.PhysicalDefense), noBonuses)
-            : DamageCalculator.CalculateElementalDamage(new DamageInput(beast.Stats.ElementalAttack, beastSkill.Modifier, target.Stats.ElementalDefense), noBonuses);
+            ? DamageCalculator.CalculatePhysicalDamage(new DamageInput(beast.Stats.PhysicalAttack, beastSkill.Modifier, target.Stats.PhysicalDefense), context)
+            : DamageCalculator.CalculateElementalDamage(new DamageInput(beast.Stats.ElementalAttack, beastSkill.Modifier, target.Stats.ElementalDefense), context);
 
         if (target.IsDefending)
         {

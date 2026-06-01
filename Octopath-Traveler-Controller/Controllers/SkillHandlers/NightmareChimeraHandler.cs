@@ -22,13 +22,15 @@ public class NightmareChimeraHandler : SkillHandler
 
         var target = targets.First();
 
-        MenuView.PromptBpUsageIfAvailable(caster.CurrentBp);
+        int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
+        caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
 
+        double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
         var chimeraHit = new ActiveSkill { Name = skill.Name, Type = chosenWeapon, Modifier = skill.Modifier };
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
-        ApplyOffensiveHit(caster, target, chimeraHit);
+        ApplyOffensiveHit(caster, target, chimeraHit, effectiveModifier);
         View.ShowFinalHp(target.Name, target.CurrentHp);
 
         return true;

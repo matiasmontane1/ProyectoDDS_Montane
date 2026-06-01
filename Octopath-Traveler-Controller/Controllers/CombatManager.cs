@@ -18,6 +18,7 @@ public class CombatManager
     private int _currentRound;
 
     private const int DesprioritizationDuration = 2;
+    private const int MinBpForDivineSkill = 3;
 
     public CombatManager(
         View view,
@@ -109,7 +110,9 @@ public class CombatManager
     {
         foreach (var traveler in _playerTeam.Where(ally => !ally.IsDead))
         {
-            traveler.RecoverBp();
+            if (!traveler.SpentBpThisRound)
+                traveler.RecoverBp();
+            traveler.ResetBpSpentFlag();
             traveler.ResetDefenseForNewRound();
         }
 
@@ -118,6 +121,11 @@ public class CombatManager
             beast.DecrementBreakingPoint();
             beast.DecrementDesprioritization();
         }
+
+        foreach (var traveler in _playerTeam)
+            traveler.TickStatusEffects();
+        foreach (var beast in _enemyTeam)
+            beast.TickStatusEffects();
     }
 
     private bool HandleTravelerTurn(Traveler traveler, List<Unit> turnQueue)
@@ -177,6 +185,7 @@ public class CombatManager
     {
         return traveler.Skills
             .Where(skillName => CanAffordSkill(traveler, skillName))
+            .Where(skillName => IsDivineSkillAvailable(traveler, skillName))
             .ToList();
     }
 
@@ -184,6 +193,12 @@ public class CombatManager
     {
         var skill = _activeSkills.FirstOrDefault(activeSkill => activeSkill.Name == skillName);
         return skill != null && traveler.CurrentSp >= skill.Sp;
+    }
+
+    private bool IsDivineSkillAvailable(Traveler traveler, string skillName)
+    {
+        var skill = _activeSkills.FirstOrDefault(activeSkill => activeSkill.Name == skillName);
+        return skill == null || !skill.IsDivine || traveler.CurrentBp >= MinBpForDivineSkill;
     }
 
     private bool ExecuteSkill(Traveler traveler, ActiveSkill skill, List<Unit> turnQueue)

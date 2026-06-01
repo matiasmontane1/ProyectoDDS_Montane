@@ -10,17 +10,27 @@ public class RevivePartyHandler : SkillHandler
 
     public override bool Execute(Traveler caster, ActiveSkill skill, List<Unit> turnQueue)
     {
-        MenuView.PromptBpUsageIfAvailable(caster.CurrentBp);
+        int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
+        caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
-
+        
         var deadTravelers = PlayerTeam.Where(ally => ally.IsDead).ToList();
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
+
+        int healAmount = bpUsed > 0
+            ? DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, bpUsed * skill.Modifier)
+            : 0;
 
         foreach (var target in deadTravelers)
         {
             target.Revive();
             View.ShowRevive(target.Name);
+            if (bpUsed > 0)
+            {
+                View.ShowHeal(target.Name, healAmount);
+                target.Heal(healAmount);
+            }
         }
 
         foreach (var target in deadTravelers)

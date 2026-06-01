@@ -22,14 +22,16 @@ public class LegholdTrapHandler : SkillHandler
 
         var target = targets.First();
 
-        MenuView.PromptBpUsageIfAvailable(caster.CurrentBp);
+        int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
+        caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
 
-        target.ApplyDesprioritization(_desprioritizationDuration);
+        int effectiveDuration = skill.ComputeEffectiveDuration(_desprioritizationDuration, bpUsed);
+        target.ApplyDesprioritization(effectiveDuration);
         MoveToEndOfQueue(target, turnQueue);
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
-        View.ShowLeghold(target.Name, _desprioritizationDuration);
+        View.ShowLeghold(target.Name, effectiveDuration);
 
         return true;
     }

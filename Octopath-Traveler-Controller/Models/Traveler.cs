@@ -14,7 +14,8 @@ public class Traveler : Unit
 
     public int CurrentSp { get; private set; }
     public int CurrentBp { get; private set; }
-    
+    public bool SpentBpThisRound { get; private set; }
+
     public bool IsDefending { get; private set; }
     public bool HasPriorityNextRound { get; private set; }
     public bool DefendedLastRound { get; private set; }
@@ -38,12 +39,21 @@ public class Traveler : Unit
         if (amount < 0) return;
         CurrentSp = Math.Max(0, CurrentSp - amount);
     }
+
+    public void RecoverSp(int amount)
+    {
+        if (amount < 0) return;
+        CurrentSp = Math.Min(Stats.Sp, CurrentSp + amount);
+    }
     
     public void SpendBp(int amount)
     {
         if (amount < 0) return;
+        if (amount > 0) SpentBpThisRound = true;
         CurrentBp = Math.Max(0, CurrentBp - amount);
     }
+
+    public void ResetBpSpentFlag() => SpentBpThisRound = false;
 
     public void SetDefending()
     {
@@ -72,6 +82,7 @@ public class Traveler : Unit
         IsDefending = false;
         HasPriorityNextRound = false;
         DefendedLastRound = false;
+        SpentBpThisRound = false;
     }
 
     public override void TakeDamage(int damage)

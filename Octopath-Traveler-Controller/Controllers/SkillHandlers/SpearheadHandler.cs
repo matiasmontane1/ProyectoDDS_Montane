@@ -17,11 +17,13 @@ public class SpearheadHandler : SkillHandler
 
         var target = targets.First();
 
-        MenuView.PromptBpUsageIfAvailable(caster.CurrentBp);
+        int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
+        caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
 
+        double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
-        ApplyOffensiveHit(caster, target, skill);
+        ApplyOffensiveHit(caster, target, skill, effectiveModifier);
         View.ShowFinalHp(target.Name, target.CurrentHp);
 
         caster.SetPriorityNextRound();

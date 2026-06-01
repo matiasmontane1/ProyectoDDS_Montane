@@ -2,33 +2,90 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Critical Rule — Clean Code Ambiguity
+## Critical Rules for Ambiguity Resolution
 
-**If there is ever any ambiguity regarding Clean Code implementation rules or specific formatting standards, you MUST use the NotebookLM skill to query the Clean Code notebook for clarification before writing code.**
+If there is ever any ambiguity regarding the implementation, you MUST resolve it by consulting the following designated sources before writing any code or making assumptions:
+
+1. **Clean Code & Formatting Doubts:** You MUST use the NotebookLM skill to query my notebook named "clean code" for clarification.
+2. **Game Rules & Mechanics Doubts:** You MUST read and review the official project documents located at `Documentos/md/Octopath_Traveler__Enunciado_General.md` and `Documentos/md/Octopath_Traveler__E3.md`. Do not invent, guess, or hallucinate game mechanics.
 
 ## Project Overview
 
-C# .NET 8.0 turn-based combat simulation based on Octopath Traveler. Academic project (DDS — Diseño de Sistemas). Three-project solution:
+C# .NET 8.0 turn-based combat simulation based on Octopath Traveler. Academic project (DDS — Diseño Detallado de Software). Three-project solution:
 
 - **Octopath-Traveler-Controller** — Game logic and entry point (console app)
 - **Octopath-Traveler-View** — View abstraction layer (class library)
 - **Octopath-Traveler.Tests** — xUnit test suite
 
-**Current delivery: E3.** E1 (BasicCombat, InvalidTeams, RandomBasicCombat) and E2 (active skills, Defender, Breaking Point, passives, beast skills) are complete. E3 adds: BP mechanics for basic attacks and skills, multi-hit skills, buff/debuff status effects, hybrid skills, divine skills, and new passive skills.
+**Current delivery: E3.** E1 and E2 are complete. E3 adds: BP mechanics for basic attacks and skills, multi-hit skills, buff/debuff status effects, hybrid skills, divine skills, and new passive skills.
+
+## E3 Implementation Roadmap (Strict Phased Execution)
+
+**CRITICAL:** Execute this plan strictly one phase at a time. Do not move to the next phase until the tests for the current phase pass. **Furthermore, you MUST NOT proceed to the next phase without my explicit authorization. After finishing a phase, passing its tests, you must STOP and ask me: "Phase [X] is complete and all tests are passing. Shall I proceed to Phase [Y]?" Wait for my explicit confirmation before writing any code for the next phase.**
+
+### Phase 1 — BP Mechanics (Basic Attack + Skill Boosting)
+Goal: `E3-BasicAttackBoosting`, `E3-BasicSkillBoosting`
+1. **CombatMenuView.PromptBpUsage:** Replace `PromptBpUsageIfAvailable` with a version that returns the chosen `int` BP amount, validates input, and re-prompts on invalid entry.
+2. **BasicAttackHandler.Execute:** Read the returned BP amount, deduct it from `traveler.CurrentBp`, and loop `1 + bpUsed` times applying the hit.
+3. **SkillHandler.Execute (base):** Read the BP amount, deduct it from `traveler.CurrentBp`, and pass it down so the modifier is scaled: `modifier * (1 + bpUsed * bonusPerBp)`.
+4. **Buff/Debuff skills:** BP extends duration, not modifier.
+5. **Divine Skill Gate:** `SkillHandlerFactory` routes divine skills to `DivineSkillHandler`. Divine skills only appear in the menu when `traveler.CurrentBp >= 3`. Skip BP prompt, auto-consume 3 BP.
+
+### Phase 2 — Multi-Hit Skills & Encore Interruption
+Goal: `E3-MultiHitOffensive`, `E3-AdvanceSkillBoosting`
+1. **ActiveSkill Model:** Add `Hits` property (parsed from description via regex `(\d+) (?:veces|ataques?)`; defaults to 1).
+2. **OffensiveSkillHandler.Execute:** Loop exactly `hits` times per target. **BP does NOT multiply hit count — it only scales the damage modifier.** A 2-hit skill used with 3 BP still hits twice, but each hit deals more damage.
+3. **Breaking Point Interruption:** Detect via `ShieldDamageProcessor` returning a signal. Print the announcement immediately before the next hit.
+4. **Encore Interruption (CRITICAL):** If a hit reduces a unit's HP to 0 mid-combo, check if the unit has the 'Encore' passive active. If yes, trigger the revive event immediately, print the revive message, and allow the remaining hits of the combo to hit the revived unit.
+5. **Drain Skills (HP Thief, Steal SP):** After all hits, compute `Math.Floor(totalDamage / 2)` (HP) or `Math.Floor(totalDamage * 0.05)` (SP), and add to caster.
+
+**Already implemented as of Phase 2 completion:** `StatusEffect` model, `Unit.ActiveEffects`, `Unit.AggregateEffectMultipliers`, `Unit.TickStatusEffects`, `Unit.ApplyStatusEffect` (with `+=` stacking), `OffensiveDebuffSkillHandler`, `BuffSkillHandler`, `BeastDebuffSkillHandler`, and all beast target selectors.
+
+### Phase 3 — Buff/Debuff Status Effects
+Goal: `E3-StatusEffects`, `E3-BeastsSkills`
+
+**Infrastructure already in place from Phase 2** (do not re-implement):
+- `StatusEffect` model: `EffectName`, `RemainingRounds` (set), `AffectedStat` (init, parsed from name), `Multiplier` (init: 1.5 for Increased, 2/3 for Decreased).
+- `Unit.ActiveEffects : List<StatusEffect>` — `ApplyStatusEffect` uses `+=` to extend duration if effect already active.
+- `Unit.AggregateEffectMultipliers(statName)` — product of all active multipliers for a stat.
+- `Unit.TickStatusEffects()` — called in `EndOfRoundProcessing` after all turns; decrements `RemainingRounds` and removes expired effects.
+- `OffensiveDebuffSkillHandler`, `BuffSkillHandler`, `BeastDebuffSkillHandler` already route correctly via `SkillHandlerFactory`.
+
+**Remaining work for Phase 3:**
+1. Investigate which specific mechanics cause `E3-StatusEffects` and `E3-BeastsSkills` to fail — the model is done, gaps are likely in edge cases or beast skill interactions.
+2. **Beast Buff/Debuff Skills:** Verify `BeastTurnController` covers all hybrid beast skills (debuff + damage combos).
+3. **Effect Stacking (reminder):** Already implemented with `+=`. Do NOT change to `=`.
+
+### Phase 4 — Observer Pattern for Passive Skills (Strict MVC)
+Goal: `E3-BasicPassives`, `E3-IntermediatePassives`
+1. **IPassiveEvent & Publisher:** Define event types. Event payloads MUST contain necessary context for calculations (e.g., `OnDamageReceivedEvent(Unit attacker, Unit defender, int damageAmount)`). The `EventPublisher.Publish()` method MUST return a `List<string>` containing the output messages from any activated observers.
+2. **CombatManager (Controller):** Receives the `List<string>` from the Publisher and passes it to `CombatView` to be printed. Observers must NEVER call Console/View methods directly.
+3. **Concrete Observers:** `VimAndVigorObserver`, `SecondWindObserver`, `HangToughObserver`, `EncoreObserver`, `InspirationObserver`, `HeightenedHealingObserver`, `BoostStartObserver`, `PersistenceObserver`, `SpSaverObserver`, `DivineAuraObserver`, `StatSwapObserver`, `TheShowGoesOnObserver`.
+4. **PatienceObserver (Strict Rule):** On `RoundEndEvent`, if HP and SP are even, grant an extra turn. These extra turns are appended to the END of the current round queue. If multiple units trigger Patience, they MUST be ordered strictly by their original position on the board, entirely ignoring the Speed stat and standard queue rules.
+
+### Phase 5 — Divine Skills
+Goal: `E3-DivineSkills`
+1. **DivineSkillHandler:** No BP prompt; auto-consume 3 BP.
+2. **Steorra's Prophecy:** Modifier = `3.0 + 0.2 * totalTeamBp` (sum all travelers' BP including dead, excluding the 3 spent).
+3. **Multi-element Divines:** Loop over the element/weapon array defined on the skill, each hit uses that specific element/type.
+
+### Phase 6 — Bonus Implementation (Optional prep)
+Goal: `E3-Bonus`, `E3-BonusRandom`
+1. Prepare the architecture to easily accept `Ethereal Healing` (heal over time), `Aelfric's Auspices` (skill executes twice), `Sealticge's Seduction` (Single target becomes AoE), and extra passives (`Saving Grace`, `Second Serving`).
 
 ## Commands
 
 ```bash
 dotnet build
 dotnet run --project Octopath-Traveler-Controller
-dotnet test
-dotnet test --filter "DisplayName~E3-BasicPassives"
+dotnet test Octopath-Traveler.Tests                                    # target test project directly (avoids macOS signing error on Controller)
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-BasicPassives"
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-BasicAttackBoosting|DisplayName~E3-BasicSkillBoosting|DisplayName~E3-MultiHitOffensive|DisplayName~E3-AdvanceSkillBoosting"  # all Phase 1+2
 ```
 
 ## Architecture & Design Standards
 
 ### Mandatory Design Patterns
-
 **Polymorphism + Factory for Skills (no switch/if-chains):**
 - Every skill type must be modeled as a subclass of an abstract `SkillHandler` (or equivalent)
 - Adding a new skill must never require modifying existing classes — Open/Closed Principle
@@ -44,7 +101,6 @@ dotnet test --filter "DisplayName~E3-BasicPassives"
 - Skills declare which strategy to use; `CombatManager` delegates target resolution
 
 ### MVC Architecture (strictly enforced)
-
 - Model: domain logic only — no I/O
 - View: all string formatting and output — no game state mutation
 - Controller: orchestrates model + view — no direct `Console.Write` calls
@@ -62,105 +118,75 @@ dotnet test --filter "DisplayName~E3-BasicPassives"
 | 8 — Boundaries | -1.0 | |
 | 10 — Classes | -2.0 | Single responsibility, skills not in CombatManager |
 | MVC | -1.0 | |
-| Cap 4 bonus | +0.25 | |
-| Cap 5 bonus | +0.5 | |
 
 **Known E2 issues to avoid repeating:**
-- Never use single-letter variables (s, t, d, u, e) — triple penalty if >10 occurrences; single-letter names are only acceptable as loop indices in the narrowest possible scope (e.g., `for (int i = ...)`)
-- Encapsulate magic numbers (0.03, 1.0, 1.5, etc.) as named constants
-- Encapsulate complex LINQ predicates into named methods
-- Never chain long LINQ expressions inline (train wrecks)
-- `CombatManager` must not own skill-execution logic or target-selection logic
+- Never use single-letter variables (s, t, d, u, e) — triple penalty if >10 occurrences; single-letter names are only acceptable as loop indices in the narrowest possible scope (e.g., `for (int i = ...)`).
+- Encapsulate magic numbers (0.03, 1.0, 1.5, etc.) as named constants.
+- Encapsulate complex LINQ predicates into named methods.
+- Never chain long LINQ expressions inline (train wrecks).
+- `CombatManager` must not own skill-execution logic or target-selection logic.
 
 **Chapter 3 — Functions (additional rules):**
-- Command Query Separation: a method either changes state OR returns a value, never both
-- If a function contains a `try` block, it must be the very first statement in the function body; no code may appear after the `catch`/`finally` blocks — extract the try/catch into its own function
+- Command Query Separation: a method either changes state OR returns a value, never both.
+- If a function contains a `try` block, it must be the very first statement in the function body; no code may appear after the `catch`/`finally` blocks — extract the try/catch into its own function.
 
 **Chapter 7 — Error Handling:**
-- Never return `null` from a method — use the Special Case pattern or throw an exception
-- Never pass `null` as an argument
-- Error handling is "one thing": a function that handles errors does nothing else
+- Never return `null` from a method — use the Special Case pattern or throw an exception.
+- Never pass `null` as an argument.
+- Error handling is "one thing": a function that handles errors does nothing else.
 
 **Chapter 10 — Classes (additional rule):**
-- SRP "AND" test: if describing what a class does requires the word "and", it must be split into two classes
+- SRP "AND" test: if describing what a class does requires the word "and", it must be split into two classes.
 
 ## Core Flow
-
 `Program.cs` → `Game` → `CombatManager` + `View`
 
 ### Domain Models
-
 - `Unit` (abstract) — base for all combatants
 - `Traveler` — player character with weapons, skills (active+passive), BP (Boost Points 0-5), SP
 - `Beast` — enemy with shields, weaknesses, and a skill
 - `Stats` — HP, SP, PhysAtk, PhysDef, ElemAtk, ElemDef, Speed
 
 **Damage formulas:**
-- Physical (basic): `floor((attacker.PhysAtk * 1.3) - defender.PhysDef)`
-- Physical (skill): `floor(attacker.PhysAtk * modifier) - defender.PhysDef`
-- Elemental (skill): `floor(attacker.ElemAtk * modifier) - defender.ElemDef`
-- All results clamped to ≥ 0. Use `Math.Floor(...)` then `Convert.ToInt32(...)`.
+
+All damage follows this pipeline:
+1. `baseRaw = max(0, round(Attack × modifier − Defense, 6))`
+   - Physical: `Attack = PhysAtk`, `Defense = PhysDef`
+   - Elemental: `Attack = ElemAtk`, `Defense = ElemDef`
+   - Basic attack modifier = 1.3 (physical)
+2. `contextMultiplier = 1.0 + (0.5 if weakness) + (0.5 if breaking point)`
+3. `result = floor(baseRaw × contextMultiplier × AttackMultiplier / DefenseMultiplier)`
+   - `AttackMultiplier` = product of all active "Increased/Decreased Attack" effects on the attacker
+   - `DefenseMultiplier` = product of all active "Increased/Decreased Defense" effects on the target
+   - Default multipliers = 1.0 (no active effects)
+   - "Increased" effects → multiplier 1.5; "Decreased" effects → multiplier 2/3
+
+Both basic attacks and skill attacks apply AttackMultiplier/DefenseMultiplier.
+
 - Breaking Point: ×1.5 damage multiplier on all hits while beast has 0 shields
 - Weakness: ×1.5 damage + decrement shields by 1
 
 ### View Layer
-
 | Implementation | Use |
 |---|---|
 | `ConsoleView` | Interactive play |
 | `TestingView` | Automated tests |
 | `ManualTestingView` | Debug failing tests (blue=correct, red=incorrect) |
 
-## Testing Strategy
-
-Data-driven tests: `.txt` files with expected output and `INPUT:` prefixed inputs. Test data in `Octopath-Traveler.Tests/bin/Debug/net8.0/data/`.
-
-**All test groups (E3 evaluation):**
-
-| Group | Deduction |
-|---|---|
-| E1-BasicCombat | -3.0 |
-| E1-InvalidTeams | -0.7 |
-| E1-RandomBasicCombat | -2.3 |
-| E2-BeastsSkills | -1.0 |
-| E2-DefendAndBreakingPoint | -1.0 |
-| E2-OffensiveSkills | -1.0 |
-| E2-HealingAndQueueSkills | -1.0 |
-| E2-BaseStatsPassives | -1.0 |
-| E2-Mix | -0.4 |
-| E2-Random | -0.4 |
-| E3-BasicAttackBoosting | -0.1 |
-| E3-BasicAttackBoostingRandom | -0.05 |
-| E3-BasicPassives | -0.1 |
-| E3-BasicPassivesRandom | -0.05 |
-| E3-MultiHitOffensive | -0.15 |
-| E3-BasicSkillBoosting | -0.15 |
-| E3-AdvanceSkillBoosting | -0.5 |
-| E3-StatusEffects | -0.5 |
-| E3-BeastsSkills | -0.5 |
-| E3-DivineSkills | -0.5 |
-| E3-IntermediatePassives | -0.5 |
-| E3-Mix | -0.1 |
-| E3-Random | -0.1 |
-| E3-Bonus | +0.6 (optional) |
-| E3-BonusRandom | +0.4 (optional) |
-| GUI missing | -2.5 |
-
 ## E3: Boost Points (BP) Mechanics
-
 ### Basic Attack Boosting
-
-- BP prompt always shown after weapon/target selection
+- BP prompt shown after weapon/target selection **only if `currentBp ≥ 1`** — if `currentBp == 0`, the prompt is skipped entirely (no output line, no input consumed) and `bpUsed = 0` automatically
 - Using N BP on basic attack → repeat the attack N+1 times total (1 base + N extra)
 - Each hit shown individually; final HP shown once at end
 - If unit dies mid-combo, continue showing remaining hits at full damage (unit stays at HP 0)
 - BP validation: if input > current BP → show error and re-prompt (loop)
-- Traveler gains 1 BP per round (max 5), starts at 0
+- Traveler starts combat with **1 BP** (not 0); gains +1 per round at round end, max 5
+- **Travelers who spent BP this round do NOT recover BP at round end** (`SpentBpThisRound` flag)
 
 **Error message:** `{name} no tiene {N} BP para utilizar`
 
 **Output (basic attack with 2 BP — 3 hits total):**
-```
+```text
 ----------------------------------------
 H'aanit ataca
 Meep recibe 373 de daño de tipo Axe
@@ -170,17 +196,15 @@ Meep termina con HP:189
 ```
 
 ### Skill Boosting
-
 - BP increases modifier by a skill-specific percentage per BP used
 - Buff/debuff skills: BP increases duration by a fixed number of rounds per BP
 - Divine skills: require exactly 3 BP, no BP scaling, no BP prompt shown, cost automatically deducted
 
 ## E3: Multi-Hit Skills
-
 For skills with Hits > 1, each hit on each target is printed sequentially. For AOE, all hits on the first target before moving to next:
 
 **Output (Fire Storm — 2 hits, all enemies):**
-```
+```text
 Cyrus usa Fire Storm
 Meep recibe 472 de daño de tipo Fire
 Meep recibe 472 de daño de tipo Fire
@@ -196,12 +220,11 @@ War Wolf termina con HP:2622
 Breaking Point mid-combo: show `{name} entra en Breaking Point` immediately after the hit that triggered it; subsequent hits use the ×1.5 multiplier.
 
 ### HP/SP Drain Skills
-
 HP Thief and Steal SP: show all hits, then show the restoration, then final HPs.
 - HP Thief restores `floor(totalDamage / 2)` HP
 - Steal SP restores `floor(totalDamage * 0.05)` SP
 
-```
+```text
 Therion usa HP Thief
 Meep recibe 172 de daño de tipo Dagger
 Meep recibe 172 de daño de tipo Dagger
@@ -211,7 +234,6 @@ Therion termina con HP:4093
 ```
 
 ## E3: Buff/Debuff System
-
 Status effects track their remaining duration and apply stat modifiers while active.
 
 **Output:** `{name} tendrá {Effect} durante {N} rondas`
@@ -221,67 +243,12 @@ Where Effect is one of: `Increased Physical Attack`, `Increased Physical Defense
 Multiple effects from one skill (e.g., Starsong) each get their own line.
 
 ## E3: Divine Skills
-
 - Only appear in skill selection menu when player has ≥ 3 BP
 - No BP prompt: automatically consume 3 BP
 - Announced and resolved like any other offensive skill
 - Steorra's Prophecy: base modifier 3.0 + 0.2 × (total team BP excluding the 3 spent to cast)
 
-## E3: Active Skills (new in E3)
-
-**Offensive multi-hit:**
-
-| Skill | Type | SP | Modifier | Target | Hits | BP effect |
-|---|---|---|---|---|---|---|
-| Fire Storm | Fire | 22 | 1.6 | Enemies | 2 | +90% mod/BP |
-| Blizzard | Ice | 22 | 1.6 | Enemies | 2 | +90% mod/BP |
-| Lightning Blast | Lightning | 22 | 1.6 | Enemies | 2 | +90% mod/BP |
-| HP Thief | Dagger | 6 | 1.6 | Single | 2 | +70% mod/BP |
-| Steal SP | Dagger | 6 | 1.6 | Single | 2 | +70% mod/BP |
-| Thousand Spears | Spear | 20 | 0.8 | Single (lowest PhysDef) | 7 | +50% mod/BP |
-| Rain of Arrows | Bow | 8 | 0.8 | Single (lowest HP) | 6 | +50% mod/BP |
-| Arrowstorm | Bow | 24 | 0.8 | Enemies | 6 | +40% mod/BP |
-| Guardian Liondog | Sword | 35 | 2.0 | Single (highest Speed) | 5 | +80% mod/BP |
-| Ignis Ardere | Fire | 36 | 1.6 | Enemies | 3 | +90% mod/BP |
-| Glacies Claudere | Ice | 36 | 1.6 | Enemies | 3 | +90% mod/BP |
-| Tonitrus Canere | Lightning | 36 | 1.6 | Enemies | 3 | +90% mod/BP |
-| Ventus Saltare | Wind | 36 | 1.6 | Enemies | 3 | +90% mod/BP |
-| Lux Congerere | Light | 36 | 1.6 | Enemies | 3 | +90% mod/BP |
-| Tenebrae Operire | Dark | 36 | 1.6 | Enemies | 3 | +90% mod/BP |
-
-**Buff/Debuff:**
-
-| Skill | SP | Target | Effect | Base Duration | BP effect |
-|---|---|---|---|---|---|
-| Sheltering Veil | 6 | Ally | Increased Elemental Defense | 2 rounds | +2 rounds/BP |
-| Abide | 4 | Ally | Increased Physical Attack | 2 rounds | +2 rounds/BP |
-| Stout Wall | 4 | User | Increased Physical Defense | 3 rounds | +2 rounds/BP |
-| Lion Dance | 4 | Ally | Increased Physical Attack | 2 rounds | +2 rounds/BP |
-| Peacock Strut | 4 | Ally | Increased Elemental Attack | 2 rounds | +2 rounds/BP |
-| Mole Dance | 4 | Ally | Increased Physical Defense | 2 rounds | +2 rounds/BP |
-| Panther Dance | 4 | Ally | Increased Speed | 2 rounds | +2 rounds/BP |
-| Shackle Foe | 4 | Single (enemy) | Decreased Physical Attack | 2 rounds | +2 rounds/BP |
-| Armor Corrosive | 4 | Single (enemy) | Decreased Physical Defense | 2 rounds | +2 rounds/BP |
-| Starsong | 25 | Ally | Increased Phys Def + Elem Def + Speed | 2 rounds | +2 rounds/BP |
-
-**Hybrid:**
-
-| Skill | Type | SP | Modifier | Target | Hits | Effect | BP effect |
-|---|---|---|---|---|---|---|---|
-| Elemental Break | Stave | 20 | 2.0 | Single | 1 | Decreased Elemental Defense 2 rounds | +100% mod/BP |
-
-**Divine (require 3 BP):**
-
-| Skill | Type | SP | Modifier | Target | Hits | Special |
-|---|---|---|---|---|---|---|
-| Brand's Thunder | Sword | 30 | 7.0 | Single | 1 | — |
-| Draefendi's Rage | Bow | 30 | 7.0 | Enemies | 1 | — |
-| Steorra's Prophecy | Dark | 50 | 3.0 | Enemies | 1 | +0.2 mod per team BP (excl. 3 spent) |
-| Balogar's Blade | 6 elements | 50 | 1.5 | Single | 6 | Fire→Ice→Lightning→Wind→Light→Dark |
-| Winnehild's Battle Cry | 6 weapons | 50 | 1.5 | Enemies | 6 | Sword→Spear→Dagger→Axe→Bow→Stave |
-
 ## E3: Passive Skills (Observer Pattern)
-
 All passives subscribe to game events. Never check passives inline.
 
 **User-targeted passives (subscriber on self):**
@@ -308,42 +275,27 @@ All passives subscribe to game events. Never check passives inline.
 | The Show Goes On | On grant buff | Duration of granted buff +1 round |
 
 **Patience output:**
-```
+```text
 {name} obtiene un turno adicional
 ```
 Then the normal turn menu follows. Multiple Patience activations: one message each in board order, then show full turn order (including extra turns).
 
 **Encore output (single-hit lethal):**
-```
+```text
 {name} recibe {N} de daño de tipo {Type}
 {name} revive
 {name} termina con HP:{floor(MaxHP * 0.25)}
 ```
 
 **Encore output (multi-hit, lethal hit mid-combo):**
-```
+```text
 {name} recibe {N} de daño    ← lethal hit
 {name} revive
 {name} recibe {N} de daño    ← remaining hits apply normally
 {name} termina con HP:{X}
 ```
 
-## E3: Beast Skills (new)
-
-| Skill | Type | Modifier | Target | Hits | Special |
-|---|---|---|---|---|---|
-| Double Bite | Phys | 1.3 | Single (lowest PhysDef) | 2 | — |
-| Shadow Magic | Elem | 1.5 | Party (all travelers) | 2 | — |
-| Triple Slash | Phys | 1.3 | Single (highest HP) | 3 | — |
-| Consume Armor | — | — | Single (highest PhysDef) | 1 | Decreased Physical Defense 2 rounds |
-| Flap | Phys | 1.4 | Single (highest HP) | 1 | Increased Speed to self 2 rounds |
-| Acid Spray | — | — | Single (highest HP) | 1 | Decreased Phys Def + Decreased Elem Def 2 rounds |
-| Gather Strength | Phys | 1.4 | Single (lowest PhysDef) | 1 | Increased Physical Attack to self 2 rounds |
-| Augmented Magic | — | — | Party (all beasts) | 1 | Increased Elem Atk + Increased Elem Def 2 rounds |
-| Volcano | Elem | 1.5 | Party (all travelers) | 1 | Then Decreased Elemental Defense to all travelers 2 rounds |
-
 ## E2 Carry-Over: Skills System
-
 **Skill targets:** Single, Ally, Enemies, Party, User
 
 **Multi-target output order** (Enemies/Party):
@@ -371,45 +323,34 @@ Then the normal turn menu follows. Multiple Patience activations: one message ea
 2. If UseSkill: skill list (team file order) + Cancelar → INPUT
    - Divine skills only appear if player has ≥3 BP
 3. If Single/Ally target: target list + Cancelar → INPUT
-4. If NOT divine: BP prompt → INPUT (validate; re-prompt if invalid)
+4. If NOT divine AND `currentBp ≥ 1`: BP prompt → INPUT (validate; re-prompt if invalid). If `currentBp == 0`: skip entirely (no output, no input).
 5. If divine: no BP prompt; consume 3 BP automatically
 6. Result block + separator
 
 ## E2 Carry-Over: Weakness & Breaking Point
-
 - Weakness hit: ×1.5 damage, decrement shields by 1, print `con debilidad`
 - Shields → 0: print `{name} entra en Breaking Point` immediately after the triggering hit
 - While in Breaking Point: all damage ×1.5
 - Breaking Point resets at round end (after beast acted or round over)
-
-## E2 Carry-Over: BaseStats Passives (applied at game start, no output)
-
-| Passive | Effect |
-|---|---|
-| Elemental Augmentation | +50 ElemAtk |
-| Summon Strength | +50 PhysAtk |
-| Hale and Hearty | +500 MaxHP + CurrentHP |
-| Fleefoot | +50 Speed |
-| Inner Strength | +50 MaxSP + CurrentSP |
+- If shields reach 0 mid-combo during a multi-hit attack, all subsequent hits in that exact same combo immediately benefit from the ×1.5 Breaking Point multiplier.
 
 ## Non-Obvious Behaviors
-
 - Turn queue recalculated every turn (reflects dynamic speed/buff changes)
-- BP recovery: +1 per round per traveler, at round end, max 5
+- BP recovery: +1 per round per traveler, at round end, max 5 — **skipped for travelers who spent BP that round**
 - BP is spent when used; dead units still count toward team BP total (Steorra's Prophecy)
+- **BP prompt is completely omitted** (no output, no input read) when `currentBp == 0`
+- **Status effect re-application extends duration additively** (`existing.RemainingRounds += newEffect.RemainingRounds`); never resets or duplicates
 - `TravelerAction` enum must live in its own file, not inside `CombatManager`
 - Data files (`characters.json`, `enemies.json`, `skills.json`, `passive_skills.json`) in `data/` relative to executable
 - Beast `CurrentShields` (not `Shields`) shown in game state
 - If unit dies mid-multi-hit: continue showing all remaining hits at normal damage, unit stays at HP 0
 - Patience extra turns follow board order, not speed order
+- **Buff/debuff multipliers apply to the final damage result**, not to raw stats: `floor(baseRaw × contextMult × AttackMult / DefenseMult)`. "Decreased Defense" on a target makes it take ×1.5 more damage (DefenseMult = 2/3 → dividing by 2/3 multiplies by 1.5).
 
 ## Token Efficiency & Core Behavior
-- Think before acting. Read existing files before writing code.
+- Think before acting. Read existing files and "E3 Implementation Plan" found in this file before writing code.
 - Be concise in output but thorough in reasoning.
-- Prefer editing over rewriting whole files.
 - Do not re-read files you have already read unless the file may have changed.
 - Skip files over 100KB unless explicitly required.
 - Test your code before declaring done.
-- No sycophantic openers or closing fluff.
 - Keep solutions simple and direct.
-- User instructions always override this file.

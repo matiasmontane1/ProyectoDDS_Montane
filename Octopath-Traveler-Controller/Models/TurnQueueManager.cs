@@ -19,7 +19,7 @@ public class TurnQueueManager
         var normal = GetNormalQueue(excludeActed: false, nextRound: false);
         var legholded = GetDesprioritizedQueue(nextRound: false);
 
-        return CompileQueue(recoveryFirst, defenderFirst, spearheadFirst, normal, legholded);
+        return CompileQueue(unit => unit.EffectiveSpeed, recoveryFirst, defenderFirst, spearheadFirst, normal, legholded);
     }
 
     public List<Unit> GenerateNextRoundPreview(List<Unit> currentRemainingQueue)
@@ -32,7 +32,7 @@ public class TurnQueueManager
         var normal = GetNormalQueue(excludeActed: true, nextRound: true, currentRemainingQueue);
         var legholded = GetDesprioritizedQueue(nextRound: true);
 
-        return CompileQueue(recoveryFirst, defenderFirst, spearheadFirst, normal, legholded);
+        return CompileQueue(unit => unit.EffectiveSpeedNextRound, recoveryFirst, defenderFirst, spearheadFirst, normal, legholded);
     }
 
     private IEnumerable<(Unit Unit, bool IsTraveler, int Index)> GetRecoveryFirst()
@@ -104,14 +104,14 @@ public class TurnQueueManager
         return !beast.IsDead && isBreakingPointFree && isDesprioritized;
     }
 
-    private List<Unit> CompileQueue(params IEnumerable<(Unit Unit, bool IsTraveler, int Index)>[] segments)
+    private List<Unit> CompileQueue(Func<Unit, int> getSpeed, params IEnumerable<(Unit Unit, bool IsTraveler, int Index)>[] segments)
     {
         var result = new List<Unit>();
 
         foreach (var segment in segments)
         {
             var orderedSegment = segment
-                .OrderByDescending(entry => entry.Unit.Stats.Speed)
+                .OrderByDescending(entry => getSpeed(entry.Unit))
                 .ThenByDescending(entry => entry.IsTraveler)
                 .ThenBy(entry => entry.Index);
             var sortedUnits = orderedSegment.Select(entry => entry.Unit);

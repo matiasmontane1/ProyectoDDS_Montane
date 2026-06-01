@@ -27,27 +27,35 @@ public class BasicAttackHandler
         Beast? target = _menuView.PromptBeastTargetSelection(traveler.Name, aliveEnemies);
         if (target == null) return false;
 
-        _menuView.PromptBpUsageIfAvailable(traveler.CurrentBp);
-        ExecuteAttack(traveler, target, weapon);
+        int bpUsed = _menuView.PromptBpUsage(traveler.Name, traveler.CurrentBp);
+        traveler.SpendBp(bpUsed);
+
+        ExecuteMultiHitAttack(traveler, target, weapon, 1 + bpUsed);
         return true;
     }
 
-    private void ExecuteAttack(Traveler traveler, Beast target, string weapon)
+    private void ExecuteMultiHitAttack(Traveler traveler, Beast target, string weapon, int hitCount)
+    {
+        _view.ShowTravelerAttacks(traveler.Name);
+
+        for (int hitIndex = 0; hitIndex < hitCount; hitIndex++)
+            ApplySingleHit(traveler, target, weapon);
+
+        _view.ShowFinalHp(target.Name, target.CurrentHp);
+    }
+
+    private void ApplySingleHit(Traveler traveler, Beast target, string weapon)
     {
         bool isWeakness = target.Weaknesses.Contains(weapon);
         var input = new DamageInput(traveler.Stats.PhysicalAttack, BasicAttackModifier, target.Stats.PhysicalDefense);
-        var context = new DamageContext(isWeakness, target.IsInBreakingPoint);
+        var context = new DamageContext(isWeakness, target.IsInBreakingPoint, traveler.PhysicalAttackMultiplier, target.PhysicalDefenseMultiplier);
         int damage = DamageCalculator.CalculatePhysicalDamage(input, context);
 
         target.TakeDamage(damage);
-
-        _view.ShowTravelerAttacks(traveler.Name);
         _view.ShowDamageWithType(target.Name, damage, weapon, isWeakness);
 
         if (isWeakness && damage > 0)
             ProcessShieldDamage(target);
-
-        _view.ShowFinalHp(target.Name, target.CurrentHp);
     }
 
     private void ProcessShieldDamage(Beast target) =>

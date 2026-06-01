@@ -45,3 +45,11 @@ public class AnyAllyTargetSelector : TravelerTargetSelector
         return target != null ? new List<Traveler> { target } : null;
     }
 }
+
+public class SelfTargetSelector : TravelerTargetSelector
+{
+    public override List<Traveler>? SelectTargets(Traveler caster, List<Traveler> playerTeam, CombatMenuView menuView)
+    {
+        return new List<Traveler> { caster };
+    }
+}

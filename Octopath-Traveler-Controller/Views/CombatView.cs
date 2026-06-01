@@ -102,6 +102,11 @@ public class CombatView
         _view.WriteLine($"{targetName} recupera {amount} de vida");
     }
 
+    public void ShowSpRecovery(string casterName, int amount)
+    {
+        _view.WriteLine($"{casterName} recupera {amount} SP");
+    }
+
     public void ShowRevive(string targetName)
     {
         _view.WriteLine($"{targetName} revive");
@@ -125,5 +130,10 @@ public class CombatView
     public void ShowDefending(string travelerName)
     {
         _view.WriteLine($"{travelerName} se defiende");
+    }
+
+    public void ShowStatusEffect(string targetName, string effectName, int rounds)
+    {
+        _view.WriteLine($"{targetName} tendrá {effectName} durante {rounds} rondas");
     }
 }

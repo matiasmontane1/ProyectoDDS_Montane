@@ -19,16 +19,55 @@ public class OffensiveSkillHandler : SkillHandler
         var targets = _targetSelector.SelectTargets(caster, GetAliveEnemies(), MenuView);
         if (targets == null || targets.Count == 0) return false;
 
-        MenuView.PromptBpUsageIfAvailable(caster.CurrentBp);
+        int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
+        caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
+
+        double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
 
-        foreach (var target in targets)
-            ApplyOffensiveHit(caster, target, skill);
+        int totalDamage = ApplyAllHitsOnTargets(caster, targets, skill, effectiveModifier);
+
+        ApplyDrainEffect(caster, skill, totalDamage);
 
         foreach (var target in targets)
             View.ShowFinalHp(target.Name, target.CurrentHp);
 
+        if (skill.IsHpThief)
+            View.ShowFinalHp(caster.Name, caster.CurrentHp);
+
         return true;
+    }
+
+    private int ApplyAllHitsOnTargets(Traveler caster, List<Beast> targets, ActiveSkill skill, double effectiveModifier)
+    {
+        int totalDamage = 0;
+        foreach (var target in targets)
+            totalDamage += ApplyHitCombo(caster, target, skill, effectiveModifier);
+        return totalDamage;
+    }
+
+    private int ApplyHitCombo(Traveler caster, Beast target, ActiveSkill skill, double effectiveModifier)
+    {
+        int comboDamage = 0;
+        for (int hitIndex = 0; hitIndex < skill.Hits; hitIndex++)
+            comboDamage += ApplyOffensiveHit(caster, target, skill, effectiveModifier);
+        return comboDamage;
+    }
+
+    private void ApplyDrainEffect(Traveler caster, ActiveSkill skill, int totalDamage)
+    {
+        if (skill.IsHpThief)
+        {
+            int healAmount = (int)Math.Floor(totalDamage / 2.0);
+            caster.Heal(healAmount);
+            View.ShowHeal(caster.Name, healAmount);
+        }
+        else if (skill.IsStealSp)
+        {
+            int spAmount = (int)Math.Floor(totalDamage * 0.05);
+            caster.RecoverSp(spAmount);
+            View.ShowSpRecovery(caster.Name, spAmount);
+        }
     }
 }

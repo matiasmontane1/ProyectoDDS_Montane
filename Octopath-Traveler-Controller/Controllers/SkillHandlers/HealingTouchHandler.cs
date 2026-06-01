@@ -13,10 +13,12 @@ public class HealingTouchHandler : SkillHandler
         var target = MenuView.PromptAllyTargetSelection(caster.Name, PlayerTeam);
         if (target == null) return false;
 
-        MenuView.PromptBpUsageIfAvailable(caster.CurrentBp);
+        int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
+        caster.SpendBp(bpUsed);
         caster.SpendSp(skill.Sp);
 
-        int healAmount = DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, skill.Modifier);
+        double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
+        int healAmount = DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, effectiveModifier);
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
 

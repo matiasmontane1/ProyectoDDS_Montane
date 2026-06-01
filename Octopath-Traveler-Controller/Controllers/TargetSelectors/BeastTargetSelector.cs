@@ -24,3 +24,30 @@ public class AllEnemiesTargetSelector : BeastTargetSelector
         return aliveEnemies.Count > 0 ? aliveEnemies : null;
     }
 }
+
+public class LowestPhysDefBeastTargetSelector : BeastTargetSelector
+{
+    public override List<Beast>? SelectTargets(Traveler caster, List<Beast> aliveEnemies, CombatMenuView menuView)
+    {
+        if (aliveEnemies.Count == 0) return null;
+        return new List<Beast> { aliveEnemies.MinBy(enemy => enemy.Stats.PhysicalDefense)! };
+    }
+}
+
+public class LowestCurrentHpBeastTargetSelector : BeastTargetSelector
+{
+    public override List<Beast>? SelectTargets(Traveler caster, List<Beast> aliveEnemies, CombatMenuView menuView)
+    {
+        if (aliveEnemies.Count == 0) return null;
+        return new List<Beast> { aliveEnemies.MinBy(enemy => enemy.CurrentHp)! };
+    }
+}
+
+public class HighestSpeedBeastTargetSelector : BeastTargetSelector
+{
+    public override List<Beast>? SelectTargets(Traveler caster, List<Beast> aliveEnemies, CombatMenuView menuView)
+    {
+        if (aliveEnemies.Count == 0) return null;
+        return new List<Beast> { aliveEnemies.MaxBy(enemy => enemy.Stats.Speed)! };
+    }
+}

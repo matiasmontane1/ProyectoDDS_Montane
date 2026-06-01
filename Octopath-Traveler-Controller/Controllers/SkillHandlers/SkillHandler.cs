@@ -22,13 +22,13 @@ public abstract class SkillHandler
 
     protected List<Beast> GetAliveEnemies() => EnemyTeam.Where(enemy => !enemy.IsDead).ToList();
 
-    protected void ApplyOffensiveHit(Traveler caster, Beast target, ActiveSkill skill)
+    protected int ApplyOffensiveHit(Traveler caster, Beast target, ActiveSkill skill, double effectiveModifier)
     {
         bool wasInBreakingPoint = target.IsInBreakingPoint;
         bool isWeakness = !string.IsNullOrEmpty(skill.Type) && target.Weaknesses.Contains(skill.Type);
         var context = new DamageContext(isWeakness, wasInBreakingPoint);
 
-        int damage = CalculateDamage(caster, target, skill, context);
+        int damage = CalculateDamage(caster, target, skill, effectiveModifier, context);
 
         if (skill.HasMercyStrikeMechanic)
             damage = Math.Min(damage, Math.Max(0, target.CurrentHp - 1));
@@ -38,20 +38,24 @@ public abstract class SkillHandler
 
         if (isWeakness && damage > 0)
             ProcessShieldDamage(target);
+
+        return damage;
     }
 
-    private static int CalculateDamage(Traveler caster, Beast target, ActiveSkill skill, DamageContext context)
+    private static int CalculateDamage(Traveler caster, Beast target, ActiveSkill skill, double effectiveModifier, DamageContext context)
     {
         if (skill.IsPhysicalOffensive)
         {
-            var physInput = new DamageInput(caster.Stats.PhysicalAttack, skill.Modifier, target.Stats.PhysicalDefense);
+            var physContext = context with { AttackMultiplier = caster.PhysicalAttackMultiplier, DefenseMultiplier = target.PhysicalDefenseMultiplier };
+            var physInput = new DamageInput(caster.Stats.PhysicalAttack, effectiveModifier, target.Stats.PhysicalDefense);
             return skill.HasLastStandMechanic
-                ? DamageCalculator.CalculateLastStandDamage(physInput, context, caster)
-                : DamageCalculator.CalculatePhysicalDamage(physInput, context);
+                ? DamageCalculator.CalculateLastStandDamage(physInput, physContext, caster)
+                : DamageCalculator.CalculatePhysicalDamage(physInput, physContext);
         }
 
-        var elemInput = new DamageInput(caster.Stats.ElementalAttack, skill.Modifier, target.Stats.ElementalDefense);
-        return DamageCalculator.CalculateElementalDamage(elemInput, context);
+        var elemContext = context with { AttackMultiplier = caster.ElementalAttackMultiplier, DefenseMultiplier = target.ElementalDefenseMultiplier };
+        var elemInput = new DamageInput(caster.Stats.ElementalAttack, effectiveModifier, target.Stats.ElementalDefense);
+        return DamageCalculator.CalculateElementalDamage(elemInput, elemContext);
     }
 
     protected void ProcessShieldDamage(Beast target) =>

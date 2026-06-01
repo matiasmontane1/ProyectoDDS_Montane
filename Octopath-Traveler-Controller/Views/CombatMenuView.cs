@@ -22,13 +22,29 @@ public class CombatMenuView
         _view.WriteLine("4: Huir");
     }
 
-    public void PromptBpUsageIfAvailable(int currentBp)
+    public int PromptBpUsage(string travelerName, int currentBp)
     {
-        if (currentBp < 1) return;
-        _view.WriteLine(Separator);
-        _view.WriteLine("Seleccione cuantos BP utilizar");
-        _view.ReadLine();
+        if (currentBp < 1) return 0;
+
+        while (true)
+        {
+            _view.WriteLine(Separator);
+            _view.WriteLine("Seleccione cuantos BP utilizar");
+            string rawInput = _view.ReadLine();
+
+            if (!int.TryParse(rawInput, out int bpRequested))
+                continue;
+
+            if (IsValidBpAmount(bpRequested, currentBp))
+                return bpRequested;
+
+            _view.WriteLine(Separator);
+            _view.WriteLine($"{travelerName} no tiene {bpRequested} BP para utilizar");
+        }
     }
+
+    private static bool IsValidBpAmount(int amount, int currentBp)
+        => amount >= 0 && amount <= currentBp;
 
     public string? PromptWeaponSelection(IReadOnlyList<string> weapons)
     {
