@@ -1,4 +1,5 @@
 using Octopath_Traveler.Controllers.TargetSelectors;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Models;
 using Octopath_Traveler.Views;
 
@@ -8,8 +9,8 @@ public class OffensiveSkillHandler : SkillHandler
 {
     private readonly BeastTargetSelector _targetSelector;
 
-    public OffensiveSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, BeastTargetSelector targetSelector)
-        : base(view, menuView, playerTeam, enemyTeam)
+    public OffensiveSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, BeastTargetSelector targetSelector, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher)
     {
         _targetSelector = targetSelector;
     }
@@ -21,7 +22,7 @@ public class OffensiveSkillHandler : SkillHandler
 
         int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
         caster.SpendBp(bpUsed);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
 
         double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
         View.ShowUnitUsesSkill(caster.Name, skill.Name);

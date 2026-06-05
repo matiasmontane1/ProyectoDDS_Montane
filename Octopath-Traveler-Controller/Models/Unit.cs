@@ -42,6 +42,8 @@ public abstract class Unit
         CurrentHp = 1;
     }
 
+    public void PreventDeath() => CurrentHp = 1;
+
     public void ApplyStatusEffect(StatusEffect effect)
     {
         var existing = ActiveEffects.FirstOrDefault(active => active.EffectName == effect.EffectName);

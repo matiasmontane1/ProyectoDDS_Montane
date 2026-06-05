@@ -136,4 +136,16 @@ public class CombatView
     {
         _view.WriteLine($"{targetName} tendrá {effectName} durante {rounds} rondas");
     }
+
+    public void ShowMessages(IEnumerable<string> messages)
+    {
+        foreach (var message in messages)
+            _view.WriteLine(message);
+    }
+
+    public void ShowExtraTurn(string unitName)
+    {
+        _view.WriteLine(Separator);
+        _view.WriteLine($"{unitName} obtiene un turno adicional");
+    }
 }

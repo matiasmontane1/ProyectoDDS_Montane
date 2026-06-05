@@ -1,18 +1,19 @@
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
 
 public class RevivePartyHandler : SkillHandler
 {
-    public RevivePartyHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam)
-        : base(view, menuView, playerTeam, enemyTeam) { }
+    public RevivePartyHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher) { }
 
     public override bool Execute(Traveler caster, ActiveSkill skill, List<Unit> turnQueue)
     {
         int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
         caster.SpendBp(bpUsed);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
         
         var deadTravelers = PlayerTeam.Where(ally => ally.IsDead).ToList();
 

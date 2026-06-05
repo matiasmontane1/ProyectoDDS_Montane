@@ -1,4 +1,5 @@
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -9,16 +10,32 @@ public abstract class SkillHandler
     protected readonly CombatMenuView MenuView;
     protected readonly List<Traveler> PlayerTeam;
     protected readonly List<Beast> EnemyTeam;
+    protected readonly EventPublisher EventPublisher;
 
-    protected SkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam)
+    protected SkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, EventPublisher eventPublisher)
     {
         View = view;
         MenuView = menuView;
         PlayerTeam = playerTeam;
         EnemyTeam = enemyTeam;
+        EventPublisher = eventPublisher;
     }
 
     public abstract bool Execute(Traveler caster, ActiveSkill skill, List<Unit> turnQueue);
+
+    protected int ResolveSpCost(Traveler caster, int baseCost)
+    {
+        var skillUseEvent = new SkillUseEvent(caster, baseCost);
+        EventPublisher.Publish(skillUseEvent);
+        return skillUseEvent.FinalSpCost;
+    }
+
+    protected int ResolveHealAmount(Traveler target, int baseAmount)
+    {
+        var healEvent = new HealEvent(target, baseAmount);
+        EventPublisher.Publish(healEvent);
+        return healEvent.FinalAmount;
+    }
 
     protected List<Beast> GetAliveEnemies() => EnemyTeam.Where(enemy => !enemy.IsDead).ToList();
 

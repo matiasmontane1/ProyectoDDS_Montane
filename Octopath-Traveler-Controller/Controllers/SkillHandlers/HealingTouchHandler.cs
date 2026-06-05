@@ -1,12 +1,13 @@
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
 
 public class HealingTouchHandler : SkillHandler
 {
-    public HealingTouchHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam)
-        : base(view, menuView, playerTeam, enemyTeam) { }
+    public HealingTouchHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher) { }
 
     public override bool Execute(Traveler caster, ActiveSkill skill, List<Unit> turnQueue)
     {
@@ -15,10 +16,11 @@ public class HealingTouchHandler : SkillHandler
 
         int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
         caster.SpendBp(bpUsed);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
 
         double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
-        int healAmount = DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, effectiveModifier);
+        int baseHealAmount = DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, effectiveModifier);
+        int finalHealAmount = ResolveHealAmount(target, baseHealAmount);
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
 
@@ -28,8 +30,8 @@ public class HealingTouchHandler : SkillHandler
             View.ShowRevive(target.Name);
         }
 
-        View.ShowHeal(target.Name, healAmount);
-        target.Heal(healAmount);
+        View.ShowHeal(target.Name, finalHealAmount);
+        target.Heal(finalHealAmount);
         View.ShowFinalHp(target.Name, target.CurrentHp);
 
         return true;

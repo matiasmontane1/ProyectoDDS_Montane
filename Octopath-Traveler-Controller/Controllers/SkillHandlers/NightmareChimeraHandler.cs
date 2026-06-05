@@ -1,5 +1,6 @@
 using Octopath_Traveler.Controllers.TargetSelectors;
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -8,8 +9,8 @@ public class NightmareChimeraHandler : SkillHandler
 {
     private static readonly string[] AvailableWeapons = { "Sword", "Spear", "Dagger", "Axe", "Bow", "Stave" };
 
-    public NightmareChimeraHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam)
-        : base(view, menuView, playerTeam, enemyTeam) { }
+    public NightmareChimeraHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher) { }
 
     public override bool Execute(Traveler caster, ActiveSkill skill, List<Unit> turnQueue)
     {
@@ -24,7 +25,7 @@ public class NightmareChimeraHandler : SkillHandler
 
         int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
         caster.SpendBp(bpUsed);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
 
         double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
         var chimeraHit = new ActiveSkill { Name = skill.Name, Type = chosenWeapon, Modifier = skill.Modifier };

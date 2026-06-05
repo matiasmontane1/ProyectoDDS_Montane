@@ -1,5 +1,6 @@
 using Octopath_Traveler.Controllers.TargetSelectors;
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -8,8 +9,8 @@ public class OffensiveDebuffSkillHandler : SkillHandler
 {
     private readonly BeastTargetSelector _targetSelector;
 
-    public OffensiveDebuffSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, BeastTargetSelector targetSelector)
-        : base(view, menuView, playerTeam, enemyTeam)
+    public OffensiveDebuffSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, BeastTargetSelector targetSelector, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher)
     {
         _targetSelector = targetSelector;
     }
@@ -21,7 +22,7 @@ public class OffensiveDebuffSkillHandler : SkillHandler
 
         int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
         caster.SpendBp(bpUsed);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
 
         double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
         int effectiveDuration = skill.ComputeEffectiveDuration(skill.ExtractBaseDuration(), bpUsed);

@@ -104,6 +104,50 @@ public class TurnQueueManager
         return !beast.IsDead && isBreakingPointFree && isDesprioritized;
     }
 
+    public void SortRemainingQueue(List<Unit> queue)
+    {
+        var recoveryBeasts = SelectRecoveryBeasts(queue).ToList();
+        var defenders = SelectDefenders(queue).ToList();
+        var spearheads = SelectSpearheads(queue).ToList();
+        var desprioritized = SelectDesprioritizedBeasts(queue).ToList();
+        var normal = queue.Except(recoveryBeasts).Except(defenders).Except(spearheads).Except(desprioritized).ToList();
+
+        var sorted = new List<Unit>();
+        sorted.AddRange(SortBeastsByEffectiveSpeed(recoveryBeasts));
+        sorted.AddRange(SortTravelersByEffectiveSpeed(defenders));
+        sorted.AddRange(SortTravelersByEffectiveSpeed(spearheads));
+        sorted.AddRange(SortMixedByEffectiveSpeed(normal));
+        sorted.AddRange(SortBeastsByEffectiveSpeed(desprioritized));
+
+        queue.Clear();
+        queue.AddRange(sorted);
+    }
+
+    private static IEnumerable<Unit> SelectRecoveryBeasts(List<Unit> queue) =>
+        queue.OfType<Beast>().Where(beast => beast.JustRecoveredFromBreakingPoint);
+
+    private static IEnumerable<Unit> SelectDefenders(List<Unit> queue) =>
+        queue.OfType<Traveler>().Where(traveler => traveler.HasPriorityNextRound && traveler.DefendedLastRound);
+
+    private static IEnumerable<Unit> SelectSpearheads(List<Unit> queue) =>
+        queue.OfType<Traveler>().Where(traveler => traveler.HasPriorityNextRound && !traveler.DefendedLastRound);
+
+    private static IEnumerable<Unit> SelectDesprioritizedBeasts(List<Unit> queue) =>
+        queue.OfType<Beast>().Where(beast => beast.IsDesprioritized);
+
+    private IEnumerable<Unit> SortTravelersByEffectiveSpeed(IEnumerable<Unit> travelers) =>
+        travelers.OrderByDescending(unit => unit.EffectiveSpeed)
+                 .ThenBy(unit => _playerTeam.IndexOf((Traveler)unit));
+
+    private IEnumerable<Unit> SortBeastsByEffectiveSpeed(IEnumerable<Unit> beasts) =>
+        beasts.OrderByDescending(unit => unit.EffectiveSpeed)
+              .ThenBy(unit => _enemyTeam.IndexOf((Beast)unit));
+
+    private IEnumerable<Unit> SortMixedByEffectiveSpeed(IEnumerable<Unit> units) =>
+        units.OrderByDescending(unit => unit.EffectiveSpeed)
+             .ThenByDescending(unit => unit is Traveler)
+             .ThenBy(unit => unit is Traveler traveler ? _playerTeam.IndexOf(traveler) : _enemyTeam.IndexOf((Beast)unit));
+
     private List<Unit> CompileQueue(Func<Unit, int> getSpeed, params IEnumerable<(Unit Unit, bool IsTraveler, int Index)>[] segments)
     {
         var result = new List<Unit>();

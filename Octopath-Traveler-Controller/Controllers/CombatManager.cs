@@ -1,5 +1,6 @@
 using Octopath_Traveler.Controllers.SkillHandlers;
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 using Octopath_Traveler_View;
 
@@ -15,6 +16,7 @@ public class CombatManager
     private readonly BeastTurnController _beastTurnController;
     private readonly BasicAttackHandler _basicAttackHandler;
     private readonly TurnQueueManager _queueManager;
+    private readonly EventPublisher _eventPublisher;
     private int _currentRound;
 
     private const int DesprioritizationDuration = 2;
@@ -32,8 +34,9 @@ public class CombatManager
         _playerTeam = playerTeam;
         _enemyTeam = enemyTeam;
         _activeSkills = activeSkills;
-        _beastTurnController = new BeastTurnController(_combatView, playerTeam, beastSkills);
-        _basicAttackHandler = new BasicAttackHandler(_combatView, _combatMenuView, enemyTeam);
+        _eventPublisher = new EventPublisher();
+        _beastTurnController = new BeastTurnController(_combatView, playerTeam, enemyTeam, beastSkills, _eventPublisher);
+        _basicAttackHandler = new BasicAttackHandler(_combatView, _combatMenuView, enemyTeam, _eventPublisher);
         _queueManager = new TurnQueueManager(_playerTeam, _enemyTeam);
         _currentRound = 1;
 
@@ -46,8 +49,20 @@ public class CombatManager
         {
             PassiveSkillApplicator.ApplyAll(traveler);
             traveler.InitializeState();
+            RegisterObservers(traveler);
+            var messages = _eventPublisher.Publish(new BattleStartEvent(traveler));
+            _combatView.ShowMessages(messages);
         }
         foreach (var beast in _enemyTeam) beast.InitializeState();
+    }
+
+    private void RegisterObservers(Traveler traveler)
+    {
+        foreach (var passiveName in traveler.PassiveSkills)
+        {
+            var observer = PassiveObserverFactory.Create(passiveName, traveler);
+            if (observer != null) _eventPublisher.Subscribe(observer);
+        }
     }
 
     public void StartCombat()
@@ -62,10 +77,57 @@ public class CombatManager
             var turnQueue = roundQueue.Where(unit => !unit.IsDead).ToList();
 
             if (HandleTurns(turnQueue)) return;
+            if (CheckAndAnnounceWinner()) return;
 
-            EndOfRoundProcessing();
+            var patienceTravelers = CheckPatience();
+            if (HandlePatienceExtraTurns(patienceTravelers)) return;
+            ResetTravelerDefenseStates();
+            CompleteRoundEnd();
+
             _currentRound++;
         }
+    }
+
+    private bool HandlePatienceExtraTurns(List<Traveler> patienceTravelers)
+    {
+        if (patienceTravelers.Count == 0) return false;
+
+        foreach (var traveler in patienceTravelers)
+            _combatView.ShowExtraTurn(traveler.Name);
+
+        var extraTurnQueue = patienceTravelers.Cast<Unit>().ToList();
+        return HandlePatienceTurns(extraTurnQueue);
+    }
+
+    private bool HandlePatienceTurns(List<Unit> turnQueue)
+    {
+        while (turnQueue.Count > 0)
+        {
+            if (CheckAndAnnounceWinner()) return true;
+            if (HandlePatienceSingleTurn(turnQueue)) return true;
+        }
+        return false;
+    }
+
+    private bool HandlePatienceSingleTurn(List<Unit> turnQueue)
+    {
+        var currentUnit = turnQueue[0];
+
+        if (currentUnit.IsDead)
+        {
+            turnQueue.RemoveAt(0);
+            return false;
+        }
+
+        var emptyQueue = new List<Unit>();
+        _combatView.ShowPreTurnContext(_playerTeam, _enemyTeam, turnQueue, _queueManager.GenerateNextRoundPreview(emptyQueue));
+
+        bool fled = false;
+        if (currentUnit is Traveler traveler)
+            fled = HandleTravelerTurn(traveler, turnQueue);
+
+        turnQueue.RemoveAt(0);
+        return fled;
     }
 
     private bool HandleTurns(List<Unit> turnQueue)
@@ -88,6 +150,9 @@ public class CombatManager
             return false;
         }
 
+        if (currentUnit is Traveler travelerToConsume)
+            travelerToConsume.ConsumeTurnStartStates();
+
         _combatView.ShowPreTurnContext(_playerTeam, _enemyTeam, turnQueue, _queueManager.GenerateNextRoundPreview(turnQueue));
 
         bool fled = false;
@@ -99,6 +164,7 @@ public class CombatManager
         turnQueue.RemoveAt(0);
         turnQueue.RemoveAll(unit => unit.IsDead);
         turnQueue.RemoveAll(IsBreakingBeastToRemove);
+        _queueManager.SortRemainingQueue(turnQueue);
 
         return fled;
     }
@@ -106,33 +172,52 @@ public class CombatManager
     private static bool IsBreakingBeastToRemove(Unit unit) =>
         unit is Beast beast && beast.IsInBreakingPoint && !beast.JustRecoveredFromBreakingPoint;
 
-    private void EndOfRoundProcessing()
+    private void ResetTravelerDefenseStates()
+    {
+        foreach (var traveler in _playerTeam.Where(ally => !ally.IsDead))
+            traveler.ResetDefenseForNewRound();
+    }
+
+    private List<Traveler> CheckPatience()
+    {
+        var patienceTravelers = new List<Traveler>();
+        foreach (var traveler in _playerTeam.Where(ally => !ally.IsDead))
+        {
+            var checkEvent = new PatienceCheckEvent(traveler);
+            _eventPublisher.Publish(checkEvent);
+            if (checkEvent.PatienceGranted)
+                patienceTravelers.Add(traveler);
+        }
+        return patienceTravelers;
+    }
+
+    private void CompleteRoundEnd()
     {
         foreach (var traveler in _playerTeam.Where(ally => !ally.IsDead))
         {
             if (!traveler.SpentBpThisRound)
                 traveler.RecoverBp();
             traveler.ResetBpSpentFlag();
-            traveler.ResetDefenseForNewRound();
         }
-
         foreach (var beast in _enemyTeam.Where(enemy => !enemy.IsDead))
         {
             beast.DecrementBreakingPoint();
             beast.DecrementDesprioritization();
         }
-
         foreach (var traveler in _playerTeam)
             traveler.TickStatusEffects();
         foreach (var beast in _enemyTeam)
             beast.TickStatusEffects();
+        foreach (var traveler in _playerTeam.Where(ally => !ally.IsDead))
+        {
+            var messages = _eventPublisher.Publish(new RoundEndEvent(traveler));
+            _combatView.ShowMessages(messages);
+        }
     }
 
     private bool HandleTravelerTurn(Traveler traveler, List<Unit> turnQueue)
     {
         if (traveler.IsDead) return false;
-
-        traveler.ConsumeTurnStartStates();
 
         while (true)
         {
@@ -192,7 +277,16 @@ public class CombatManager
     private bool CanAffordSkill(Traveler traveler, string skillName)
     {
         var skill = _activeSkills.FirstOrDefault(activeSkill => activeSkill.Name == skillName);
-        return skill != null && traveler.CurrentSp >= skill.Sp;
+        if (skill == null) return false;
+        int effectiveCost = ComputeEffectiveSpCost(traveler, skill.Sp);
+        return traveler.CurrentSp >= effectiveCost;
+    }
+
+    private int ComputeEffectiveSpCost(Traveler traveler, int baseCost)
+    {
+        var costEvent = new SkillUseEvent(traveler, baseCost);
+        _eventPublisher.Publish(costEvent);
+        return costEvent.FinalSpCost;
     }
 
     private bool IsDivineSkillAvailable(Traveler traveler, string skillName)
@@ -203,7 +297,7 @@ public class CombatManager
 
     private bool ExecuteSkill(Traveler traveler, ActiveSkill skill, List<Unit> turnQueue)
     {
-        var handler = SkillHandlerFactory.Create(skill, _combatView, _combatMenuView, _playerTeam, _enemyTeam, DesprioritizationDuration);
+        var handler = SkillHandlerFactory.Create(skill, _combatView, _combatMenuView, _playerTeam, _enemyTeam, DesprioritizationDuration, _eventPublisher);
         return handler.Execute(traveler, skill, turnQueue);
     }
 

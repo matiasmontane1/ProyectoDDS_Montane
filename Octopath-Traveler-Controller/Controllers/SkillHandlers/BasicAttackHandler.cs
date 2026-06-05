@@ -1,4 +1,5 @@
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -10,12 +11,14 @@ public class BasicAttackHandler
     private readonly CombatView _view;
     private readonly CombatMenuView _menuView;
     private readonly List<Beast> _enemyTeam;
+    private readonly EventPublisher _eventPublisher;
 
-    public BasicAttackHandler(CombatView view, CombatMenuView menuView, List<Beast> enemyTeam)
+    public BasicAttackHandler(CombatView view, CombatMenuView menuView, List<Beast> enemyTeam, EventPublisher eventPublisher)
     {
         _view = view;
         _menuView = menuView;
         _enemyTeam = enemyTeam;
+        _eventPublisher = eventPublisher;
     }
 
     public bool Execute(Traveler traveler)
@@ -38,13 +41,17 @@ public class BasicAttackHandler
     {
         _view.ShowTravelerAttacks(traveler.Name);
 
+        int totalDamage = 0;
         for (int hitIndex = 0; hitIndex < hitCount; hitIndex++)
-            ApplySingleHit(traveler, target, weapon);
+            totalDamage += ApplySingleHit(traveler, target, weapon);
+
+        var messages = _eventPublisher.Publish(new BasicAttackCompletedEvent(traveler, totalDamage));
+        _view.ShowMessages(messages);
 
         _view.ShowFinalHp(target.Name, target.CurrentHp);
     }
 
-    private void ApplySingleHit(Traveler traveler, Beast target, string weapon)
+    private int ApplySingleHit(Traveler traveler, Beast target, string weapon)
     {
         bool isWeakness = target.Weaknesses.Contains(weapon);
         var input = new DamageInput(traveler.Stats.PhysicalAttack, BasicAttackModifier, target.Stats.PhysicalDefense);
@@ -56,6 +63,8 @@ public class BasicAttackHandler
 
         if (isWeakness && damage > 0)
             ProcessShieldDamage(target);
+
+        return damage;
     }
 
     private void ProcessShieldDamage(Beast target) =>

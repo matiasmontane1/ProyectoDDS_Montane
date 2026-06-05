@@ -1,5 +1,6 @@
 using Octopath_Traveler.Controllers.TargetSelectors;
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -8,8 +9,8 @@ public class LegholdTrapHandler : SkillHandler
 {
     private readonly int _desprioritizationDuration;
 
-    public LegholdTrapHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, int desprioritizationDuration)
-        : base(view, menuView, playerTeam, enemyTeam)
+    public LegholdTrapHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, int desprioritizationDuration, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher)
     {
         _desprioritizationDuration = desprioritizationDuration;
     }
@@ -24,7 +25,7 @@ public class LegholdTrapHandler : SkillHandler
 
         int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
         caster.SpendBp(bpUsed);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
 
         int effectiveDuration = skill.ComputeEffectiveDuration(_desprioritizationDuration, bpUsed);
         target.ApplyDesprioritization(effectiveDuration);

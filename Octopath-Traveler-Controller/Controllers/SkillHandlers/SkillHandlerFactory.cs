@@ -1,5 +1,6 @@
 using Octopath_Traveler.Controllers.TargetSelectors;
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -12,23 +13,24 @@ public static class SkillHandlerFactory
         CombatMenuView menuView,
         List<Traveler> playerTeam,
         List<Beast> enemyTeam,
-        int desprioritizationDuration)
+        int desprioritizationDuration,
+        EventPublisher eventPublisher)
     {
         return skill.Name switch
         {
-            "Leghold Trap"  => new LegholdTrapHandler(view, menuView, playerTeam, enemyTeam, desprioritizationDuration),
-            "Spearhead"     => new SpearheadHandler(view, menuView, playerTeam, enemyTeam),
-            "Revive"        => new RevivePartyHandler(view, menuView, playerTeam, enemyTeam),
-            "Vivify"        => new VivifyHandler(view, menuView, playerTeam, enemyTeam),
-            "Healing Touch" => new HealingTouchHandler(view, menuView, playerTeam, enemyTeam),
-            _ when skill.IsShootingStars           => new ShootingStarsHandler(view, menuView, playerTeam, enemyTeam),
-            _ when skill.IsNightmareChimera        => new NightmareChimeraHandler(view, menuView, playerTeam, enemyTeam),
-            _ when skill.IsDivine                  => new DivineSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBeastTargetSelector(skill)),
-            _ when skill.IsOffensiveDebuff         => new OffensiveDebuffSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBeastTargetSelector(skill)),
-            _ when skill.IsOffensive               => new OffensiveSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBeastTargetSelector(skill)),
-            _ when skill.IsEnemyDebuff             => new BeastDebuffSkillHandler(view, menuView, playerTeam, enemyTeam, new SingleBeastTargetSelector()),
-            _ when skill.IsBuffSkill               => new BuffSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBuffTargetSelector(skill)),
-            _                                      => new HealSkillHandler(view, menuView, playerTeam, enemyTeam, BuildTravelerTargetSelector(skill)),
+            "Leghold Trap"  => new LegholdTrapHandler(view, menuView, playerTeam, enemyTeam, desprioritizationDuration, eventPublisher),
+            "Spearhead"     => new SpearheadHandler(view, menuView, playerTeam, enemyTeam, eventPublisher),
+            "Revive"        => new RevivePartyHandler(view, menuView, playerTeam, enemyTeam, eventPublisher),
+            "Vivify"        => new VivifyHandler(view, menuView, playerTeam, enemyTeam, eventPublisher),
+            "Healing Touch" => new HealingTouchHandler(view, menuView, playerTeam, enemyTeam, eventPublisher),
+            _ when skill.IsShootingStars           => new ShootingStarsHandler(view, menuView, playerTeam, enemyTeam, eventPublisher),
+            _ when skill.IsNightmareChimera        => new NightmareChimeraHandler(view, menuView, playerTeam, enemyTeam, eventPublisher),
+            _ when skill.IsDivine                  => new DivineSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBeastTargetSelector(skill), eventPublisher),
+            _ when skill.IsOffensiveDebuff         => new OffensiveDebuffSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBeastTargetSelector(skill), eventPublisher),
+            _ when skill.IsOffensive               => new OffensiveSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBeastTargetSelector(skill), eventPublisher),
+            _ when skill.IsEnemyDebuff             => new BeastDebuffSkillHandler(view, menuView, playerTeam, enemyTeam, new SingleBeastTargetSelector(), eventPublisher),
+            _ when skill.IsBuffSkill               => new BuffSkillHandler(view, menuView, playerTeam, enemyTeam, BuildBuffTargetSelector(skill), eventPublisher),
+            _                                      => new HealSkillHandler(view, menuView, playerTeam, enemyTeam, BuildTravelerTargetSelector(skill), eventPublisher),
         };
     }
 

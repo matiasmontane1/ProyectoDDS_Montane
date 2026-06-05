@@ -1,5 +1,6 @@
 using Octopath_Traveler.Controllers.TargetSelectors;
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -10,8 +11,8 @@ public class DivineSkillHandler : SkillHandler
 
     private readonly BeastTargetSelector _targetSelector;
 
-    public DivineSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, BeastTargetSelector targetSelector)
-        : base(view, menuView, playerTeam, enemyTeam)
+    public DivineSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, BeastTargetSelector targetSelector, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher)
     {
         _targetSelector = targetSelector;
     }
@@ -22,7 +23,7 @@ public class DivineSkillHandler : SkillHandler
         if (targets == null || targets.Count == 0) return false;
 
         caster.SpendBp(DivineBpCost);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
 

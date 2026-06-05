@@ -1,5 +1,6 @@
 using Octopath_Traveler.Controllers.TargetSelectors;
 using Octopath_Traveler.Models;
+using Octopath_Traveler.Models.Passives;
 using Octopath_Traveler.Views;
 
 namespace Octopath_Traveler.Controllers.SkillHandlers;
@@ -8,8 +9,8 @@ public class HealSkillHandler : SkillHandler
 {
     private readonly TravelerTargetSelector _targetSelector;
 
-    public HealSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, TravelerTargetSelector targetSelector)
-        : base(view, menuView, playerTeam, enemyTeam)
+    public HealSkillHandler(CombatView view, CombatMenuView menuView, List<Traveler> playerTeam, List<Beast> enemyTeam, TravelerTargetSelector targetSelector, EventPublisher eventPublisher)
+        : base(view, menuView, playerTeam, enemyTeam, eventPublisher)
     {
         _targetSelector = targetSelector;
     }
@@ -21,23 +22,23 @@ public class HealSkillHandler : SkillHandler
 
         int bpUsed = MenuView.PromptBpUsage(caster.Name, caster.CurrentBp);
         caster.SpendBp(bpUsed);
-        caster.SpendSp(skill.Sp);
+        caster.SpendSp(ResolveSpCost(caster, skill.Sp));
 
-        double effectiveModifier = skill.ComputeEffectiveModifier(bpUsed);
-        int healAmount = DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, effectiveModifier);
+        int baseHealAmount = DamageCalculator.CalculateHeal(caster.Stats.ElementalDefense, skill.ComputeEffectiveModifier(bpUsed));
 
         View.ShowUnitUsesSkill(caster.Name, skill.Name);
-        ApplyHeal(targets, healAmount);
+        ApplyHeal(targets, baseHealAmount);
 
         return true;
     }
 
-    private void ApplyHeal(List<Traveler> targets, int healAmount)
+    private void ApplyHeal(List<Traveler> targets, int baseHealAmount)
     {
         foreach (var target in targets)
         {
-            View.ShowHeal(target.Name, healAmount);
-            target.Heal(healAmount);
+            int finalHealAmount = ResolveHealAmount(target, baseHealAmount);
+            View.ShowHeal(target.Name, finalHealAmount);
+            target.Heal(finalHealAmount);
         }
 
         foreach (var target in targets)

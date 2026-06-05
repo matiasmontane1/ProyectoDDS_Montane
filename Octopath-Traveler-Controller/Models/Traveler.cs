@@ -7,6 +7,7 @@ public class Traveler : Unit
 {
     private const int InitialBp = 1;
     private const int MaxBp = 5;
+    private const double EncoreRevivePercent = 0.25;
 
     public List<string> Weapons { get; init; } = new();
     public List<string> Skills { get; init; } = new();
@@ -19,6 +20,7 @@ public class Traveler : Unit
     public bool IsDefending { get; private set; }
     public bool HasPriorityNextRound { get; private set; }
     public bool DefendedLastRound { get; private set; }
+    public bool EncoreUsed { get; private set; }
 
     public override void InitializeState()
     {
@@ -55,10 +57,18 @@ public class Traveler : Unit
 
     public void ResetBpSpentFlag() => SpentBpThisRound = false;
 
+    public void UseEncore()
+    {
+        EncoreUsed = true;
+        CurrentHp = (int)Math.Floor(Stats.Hp * EncoreRevivePercent);
+    }
+
     public void SetDefending()
     {
         IsDefending = true;
     }
+
+    public void ResetIsDefending() => IsDefending = false;
 
     public void SetPriorityNextRound()
     {
@@ -67,6 +77,7 @@ public class Traveler : Unit
 
     public void ConsumeTurnStartStates()
     {
+        IsDefending = false;
         HasPriorityNextRound = false;
         DefendedLastRound = false;
     }

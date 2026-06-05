@@ -17,57 +17,116 @@ C# .NET 8.0 turn-based combat simulation based on Octopath Traveler. Academic pr
 - **Octopath-Traveler-View** — View abstraction layer (class library)
 - **Octopath-Traveler.Tests** — xUnit test suite
 
-**Current delivery: E3.** E1 and E2 are complete. E3 adds: BP mechanics for basic attacks and skills, multi-hit skills, buff/debuff status effects, hybrid skills, divine skills, and new passive skills.
+**Current delivery: E3.** E1 and E2 are complete. Phases 1, 2, and 3 are done. Phase 4 (passives) is next.
 
 ## E3 Implementation Roadmap (Strict Phased Execution)
 
 **CRITICAL:** Execute this plan strictly one phase at a time. Do not move to the next phase until the tests for the current phase pass. **Furthermore, you MUST NOT proceed to the next phase without my explicit authorization. After finishing a phase, passing its tests, you must STOP and ask me: "Phase [X] is complete and all tests are passing. Shall I proceed to Phase [Y]?" Wait for my explicit confirmation before writing any code for the next phase.**
 
-### Phase 1 — BP Mechanics (Basic Attack + Skill Boosting)
+### ✅ Phase 1 — BP Mechanics (Basic Attack + Skill Boosting) — COMPLETE
 Goal: `E3-BasicAttackBoosting`, `E3-BasicSkillBoosting`
-1. **CombatMenuView.PromptBpUsage:** Replace `PromptBpUsageIfAvailable` with a version that returns the chosen `int` BP amount, validates input, and re-prompts on invalid entry.
-2. **BasicAttackHandler.Execute:** Read the returned BP amount, deduct it from `traveler.CurrentBp`, and loop `1 + bpUsed` times applying the hit.
-3. **SkillHandler.Execute (base):** Read the BP amount, deduct it from `traveler.CurrentBp`, and pass it down so the modifier is scaled: `modifier * (1 + bpUsed * bonusPerBp)`.
-4. **Buff/Debuff skills:** BP extends duration, not modifier.
-5. **Divine Skill Gate:** `SkillHandlerFactory` routes divine skills to `DivineSkillHandler`. Divine skills only appear in the menu when `traveler.CurrentBp >= 3`. Skip BP prompt, auto-consume 3 BP.
 
-### Phase 2 — Multi-Hit Skills & Encore Interruption
+All passing. Key implementations:
+- `CombatMenuView.PromptBpUsage` validates input and re-prompts on error.
+- `BasicAttackHandler.Execute` loops `1 + bpUsed` times.
+- `SkillHandler.Execute` scales modifier: `modifier * (1 + bpUsed * bonusPerBp)`.
+- Buff/debuff skills: BP extends duration, not modifier.
+- `SkillHandlerFactory` routes divine skills to `DivineSkillHandler`. Gate: `currentBp >= 3`.
+
+### ✅ Phase 2 — Multi-Hit Skills & Encore Interruption — COMPLETE
 Goal: `E3-MultiHitOffensive`, `E3-AdvanceSkillBoosting`
-1. **ActiveSkill Model:** Add `Hits` property (parsed from description via regex `(\d+) (?:veces|ataques?)`; defaults to 1).
-2. **OffensiveSkillHandler.Execute:** Loop exactly `hits` times per target. **BP does NOT multiply hit count — it only scales the damage modifier.** A 2-hit skill used with 3 BP still hits twice, but each hit deals more damage.
-3. **Breaking Point Interruption:** Detect via `ShieldDamageProcessor` returning a signal. Print the announcement immediately before the next hit.
-4. **Encore Interruption (CRITICAL):** If a hit reduces a unit's HP to 0 mid-combo, check if the unit has the 'Encore' passive active. If yes, trigger the revive event immediately, print the revive message, and allow the remaining hits of the combo to hit the revived unit.
-5. **Drain Skills (HP Thief, Steal SP):** After all hits, compute `Math.Floor(totalDamage / 2)` (HP) or `Math.Floor(totalDamage * 0.05)` (SP), and add to caster.
 
-**Already implemented as of Phase 2 completion:** `StatusEffect` model, `Unit.ActiveEffects`, `Unit.AggregateEffectMultipliers`, `Unit.TickStatusEffects`, `Unit.ApplyStatusEffect` (with `+=` stacking), `OffensiveDebuffSkillHandler`, `BuffSkillHandler`, `BeastDebuffSkillHandler`, and all beast target selectors.
+All passing. Key implementations:
+- `ActiveSkill.Hits` parsed via regex `(\d+) (?:veces|ataques?)`, defaults to 1.
+- `OffensiveSkillHandler.Execute` loops `hits` times per target. BP only scales modifier, never hit count.
+- Breaking Point interruption: detected via `ShieldDamageProcessor`; announcement printed before next hit.
+- Encore revive fires mid-combo; remaining hits continue on revived unit.
+- Drain skills: `HP Thief` → `floor(total / 2)` HP; `Steal SP` → `floor(total * 0.05)` SP; after all hits.
+- Full infrastructure in place: `StatusEffect`, `Unit.ActiveEffects`, `ApplyStatusEffect` (`+=` stacking), `OffensiveDebuffSkillHandler`, `BuffSkillHandler`, `BeastDebuffSkillHandler`.
 
-### Phase 3 — Buff/Debuff Status Effects
+### ✅ Phase 3 — Buff/Debuff Status Effects & Beast Skills — COMPLETE
 Goal: `E3-StatusEffects`, `E3-BeastsSkills`
 
-**Infrastructure already in place from Phase 2** (do not re-implement):
-- `StatusEffect` model: `EffectName`, `RemainingRounds` (set), `AffectedStat` (init, parsed from name), `Multiplier` (init: 1.5 for Increased, 2/3 for Decreased).
-- `Unit.ActiveEffects : List<StatusEffect>` — `ApplyStatusEffect` uses `+=` to extend duration if effect already active.
-- `Unit.AggregateEffectMultipliers(statName)` — product of all active multipliers for a stat.
-- `Unit.TickStatusEffects()` — called in `EndOfRoundProcessing` after all turns; decrements `RemainingRounds` and removes expired effects.
-- `OffensiveDebuffSkillHandler`, `BuffSkillHandler`, `BeastDebuffSkillHandler` already route correctly via `SkillHandlerFactory`.
+All 41 tests passing. Root causes discovered and fixed:
 
-**Remaining work for Phase 3:**
-1. Investigate which specific mechanics cause `E3-StatusEffects` and `E3-BeastsSkills` to fail — the model is done, gaps are likely in edge cases or beast skill interactions.
-2. **Beast Buff/Debuff Skills:** Verify `BeastTurnController` covers all hybrid beast skills (debuff + damage combos).
-3. **Effect Stacking (reminder):** Already implemented with `+=`. Do NOT change to `=`.
+**Beast multi-hit (Double Bite, Shadow Magic, Triple Slash):** `BeastTurnController` was not looping over `BeastSkill.Hits`. Fix: added hit loop in `ExecuteSingleTargetSkill` and `ExecuteAoeSkill`.
+
+**Beast buff/debuff routing:** `IsNonDamaging` skills (Modifier == 0) were being silently skipped. Fix: `ExecuteNonDamagingSkill` dispatches to:
+- `ApplyAllBeastEffects` when `AllBeastEffects.Count > 0` (Augmented Magic pattern — Target="Party")
+- `ApplyTargetDebuffs` otherwise (Consume Armor, Acid Spray)
+
+**Beast hybrid skills** (Gather Strength, Flap): damage hit loop first, then self-buff shown and applied, then final HP.
+
+**Volcano (AoE + per-target debuff):** for each target: damage hit, then debuff shown and applied, then final HPs for all.
+
+**`se defiende` message:** shown ONCE per target BEFORE the hit loop — never once per hit. The damage halving still applies to all hits.
+
+**Speed buff mid-round turn order:** `TurnQueueManager.SortRemainingQueue(queue)` called in `CombatManager.HandleSingleTurn` after removing the current unit. Preserves priority groups (recovery beasts → defenders → spearheads → normal → desprioritized), re-sorts within each group by `EffectiveSpeed`.
+
+**Effect parsing from description:** `BeastSkill` uses Regex to parse four effect categories from the Spanish description text:
+- `SelfEffects`: `"El usuario obtiene X durante N rondas"`
+- `TargetEffects`: `"Aplica X al viajero ... durante N rondas"`
+- `PostAttackTargetEffects`: `"Luego aplica X a ... durante N rondas"`
+- `AllBeastEffects`: `"Otorga X a todas las bestias durante N rondas"`
+
+**`BeastTurnController` requires enemy team:** constructor now takes `List<Beast> enemyTeam` — needed by `ApplyAllBeastEffects` to iterate all alive beasts.
 
 ### Phase 4 — Observer Pattern for Passive Skills (Strict MVC)
 Goal: `E3-BasicPassives`, `E3-IntermediatePassives`
-1. **IPassiveEvent & Publisher:** Define event types. Event payloads MUST contain necessary context for calculations (e.g., `OnDamageReceivedEvent(Unit attacker, Unit defender, int damageAmount)`). The `EventPublisher.Publish()` method MUST return a `List<string>` containing the output messages from any activated observers.
-2. **CombatManager (Controller):** Receives the `List<string>` from the Publisher and passes it to `CombatView` to be printed. Observers must NEVER call Console/View methods directly.
-3. **Concrete Observers:** `VimAndVigorObserver`, `SecondWindObserver`, `HangToughObserver`, `EncoreObserver`, `InspirationObserver`, `HeightenedHealingObserver`, `BoostStartObserver`, `PersistenceObserver`, `SpSaverObserver`, `DivineAuraObserver`, `StatSwapObserver`, `TheShowGoesOnObserver`.
-4. **PatienceObserver (Strict Rule):** On `RoundEndEvent`, if HP and SP are even, grant an extra turn. These extra turns are appended to the END of the current round queue. If multiple units trigger Patience, they MUST be ordered strictly by their original position on the board, entirely ignoring the Speed stat and standard queue rules.
+
+**Existing infrastructure (do NOT re-implement):**
+- `PassiveSkillApplicator` in `Models/PassiveSkillApplicator.cs` — called in `CombatManager.InitializeCombatants()`. Currently applies base-stat passives (BoostStart, StatSwap). Extend or replace with the Observer pattern.
+- `passive_skills.json` data file — already loaded.
+
+**What needs building:**
+
+1. **Event types** — define as records/classes implementing `IPassiveEvent`:
+   - `BattleStartEvent(Traveler traveler)`
+   - `RoundEndEvent(Traveler traveler)`
+   - `OnDamageReceivedEvent(Unit attacker, Unit defender, int damageAmount)`
+   - `OnHealEvent(Unit healer, Unit target, int healAmount)`
+   - `OnSkillUseEvent(Traveler caster, ActiveSkill skill)`
+   - `OnBasicAttackEvent(Traveler attacker, int totalDamage)`
+   - `OnBuffReceivedEvent(Traveler target, StatusEffect effect)`
+   - `OnBuffGrantedEvent(Traveler caster, Traveler target, StatusEffect effect)`
+   - `OnDeathEvent(Unit deceased)` — for Encore
+
+2. **`EventPublisher`** — holds subscriber list; `Publish(IPassiveEvent)` returns `List<string>` (messages from all activated observers). Observers MUST NOT call View/Console — they return strings only.
+
+3. **`CombatManager`** — receives `List<string>` from `EventPublisher.Publish()` and passes to `CombatView` to print. Add `EventPublisher` field; fire events at these exact points:
+   - `BattleStartEvent`: in `InitializeCombatants()` per traveler → BoostStart, StatSwap
+   - `OnDamageReceivedEvent`: immediately after `TakeDamage()` in every damage-dealing path → HangTough, Encore, DivineAura
+   - `OnHealEvent`: after every `Heal()` call → HeightenedHealing
+   - `OnSkillUseEvent`: before SP is deducted in `SkillHandler.Execute` → SpSaver
+   - `OnBasicAttackEvent`: after all basic-attack hits complete → Inspiration
+   - `OnBuffReceivedEvent`: after every `ApplyStatusEffect()` on a Traveler → Persistence
+   - `OnBuffGrantedEvent`: when a caster grants a buff to a different target → TheShowGoesOn
+   - `RoundEndEvent`: in `EndOfRoundProcessing()` per alive traveler, after BP/defense reset → VimAndVigor, SecondWind, Patience
+
+4. **Concrete observers:** `VimAndVigorObserver`, `SecondWindObserver`, `HangToughObserver`, `EncoreObserver`, `InspirationObserver`, `HeightenedHealingObserver`, `BoostStartObserver`, `PersistenceObserver`, `SpSaverObserver`, `DivineAuraObserver`, `StatSwapObserver`, `TheShowGoesOnObserver`, `PatienceObserver`.
+
+5. **PatienceObserver (Strict Rule):** On `RoundEndEvent`, if HP and SP are BOTH even, grant an extra turn. Append extra turns to the END of the current round queue. Multiple Patience activations must be ordered strictly by board position, ignoring Speed.
+
+**Output messages for passives (confirmed from spec):**
+- VimAndVigor: `{name} recupera {N} de vida`
+- SecondWind: `{name} recupera {N} SP`
+- HangTough: prevents death (no message — HP set to 1)
+- Encore: `{name} revive` then `{name} termina con HP:{floor(MaxHP*0.25)}`
+- Inspiration: `{name} recupera {N} SP`
+- HeightenedHealing: healed amount is ×1.3 (no extra message, just more HP)
+- BoostStart: starts with +1 BP (applies before combat, no message)
+- StatSwap: swaps PhysAtk ↔ ElemAtk (applies before combat, no message)
+- Persistence: buff duration +1 (applied silently during buff reception)
+- SpSaver: SP cost halved (applied silently before deduction)
+- DivineAura: if both HP values even → 0 damage (no extra message)
+- TheShowGoesOn: buff duration +1 on granted buff (silent)
+- Patience: `{name} obtiene un turno adicional`
 
 ### Phase 5 — Divine Skills
 Goal: `E3-DivineSkills`
 1. **DivineSkillHandler:** No BP prompt; auto-consume 3 BP.
-2. **Steorra's Prophecy:** Modifier = `3.0 + 0.2 * totalTeamBp` (sum all travelers' BP including dead, excluding the 3 spent).
-3. **Multi-element Divines:** Loop over the element/weapon array defined on the skill, each hit uses that specific element/type.
+2. **Steorra's Prophecy:** Modifier = `3.0 + 0.2 * totalTeamBp` (sum all travelers' BP including dead, **excluding** the 3 spent to cast).
+3. **Multi-element Divines:** Loop over the element/weapon array defined on the skill; each hit uses that specific element/type.
 
 ### Phase 6 — Bonus Implementation (Optional prep)
 Goal: `E3-Bonus`, `E3-BonusRandom`
@@ -78,9 +137,14 @@ Goal: `E3-Bonus`, `E3-BonusRandom`
 ```bash
 dotnet build
 dotnet run --project Octopath-Traveler-Controller
-dotnet test Octopath-Traveler.Tests                                    # target test project directly (avoids macOS signing error on Controller)
+dotnet test Octopath-Traveler.Tests                                              # full suite
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-StatusEffects|DisplayName~E3-BeastsSkills"
 dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-BasicPassives"
-dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-BasicAttackBoosting|DisplayName~E3-BasicSkillBoosting|DisplayName~E3-MultiHitOffensive|DisplayName~E3-AdvanceSkillBoosting"  # all Phase 1+2
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-IntermediatePassives"
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-DivineSkills"
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-BasicPassives|DisplayName~E3-IntermediatePassives"
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E1|DisplayName~E2"    # regression check
+dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-BasicAttackBoosting|DisplayName~E3-BasicSkillBoosting|DisplayName~E3-MultiHitOffensive|DisplayName~E3-AdvanceSkillBoosting|DisplayName~E3-StatusEffects|DisplayName~E3-BeastsSkills"  # phases 1–3
 ```
 
 ## Architecture & Design Standards
@@ -106,6 +170,7 @@ dotnet test Octopath-Traveler.Tests --filter "DisplayName~E3-BasicAttackBoosting
 - Controller: orchestrates model + view — no direct `Console.Write` calls
 - `CombatManager` must not call view methods that show game state mid-flow (show state only at defined display points)
 - `Game.cs` must not call view with hardcoded strings; route through view methods
+- **Observers must NEVER call Console/View methods directly** — they return `List<string>` messages; CombatManager prints them.
 
 ### Clean Code Chapters (all evaluated in E3)
 
@@ -201,7 +266,7 @@ Meep termina con HP:189
 - Divine skills: require exactly 3 BP, no BP scaling, no BP prompt shown, cost automatically deducted
 
 ## E3: Multi-Hit Skills
-For skills with Hits > 1, each hit on each target is printed sequentially. For AOE, all hits on the first target before moving to next:
+For skills with Hits > 1, each hit on each target is printed sequentially. For AoE, all hits on the first target before moving to next:
 
 **Output (Fire Storm — 2 hits, all enemies):**
 ```text
@@ -241,6 +306,83 @@ Status effects track their remaining duration and apply stat modifiers while act
 Where Effect is one of: `Increased Physical Attack`, `Increased Physical Defense`, `Increased Elemental Attack`, `Increased Elemental Defense`, `Increased Speed`, `Decreased Physical Attack`, `Decreased Physical Defense`, `Decreased Elemental Attack`, `Decreased Elemental Defense`, `Decreased Speed`.
 
 Multiple effects from one skill (e.g., Starsong) each get their own line.
+
+## E3: Beast Skill Output Patterns
+
+Beast skill output depends on skill category. The category is determined from the description in `beast_skills.json`.
+
+**Multi-hit single-target (e.g., Double Bite — 2 hits):**
+```text
+Remnant usa Double Bite
+Z'aanta recibe 37 de daño físico
+Z'aanta recibe 37 de daño físico
+Z'aanta termina con HP:3148
+```
+
+**Multi-hit AoE (e.g., Shadow Magic — 2 hits, all travelers):**
+```text
+Devourer of Men usa Shadow Magic
+Olberic recibe 194 de daño elemental
+Olberic recibe 194 de daño elemental
+Primrose recibe 182 de daño elemental
+Primrose recibe 182 de daño elemental
+Olberic termina con HP:5393
+Primrose termina con HP:3638
+```
+
+**Attack + self-buff (e.g., Gather Strength, Flap):**
+```text
+Accursed Armor usa Gather Strength
+Olberic recibe 182 de daño físico
+Accursed Armor tendrá Increased Physical Attack durante 2 rondas
+Olberic termina con HP:5599
+```
+
+**AoE attack + per-target debuff (Volcano):**
+```text
+Blood Revenant usa Volcano
+Olberic recibe 593 de daño elemental
+Olberic tendrá Decreased Elemental Defense durante 2 rondas
+Primrose recibe 532 de daño elemental
+Primrose tendrá Decreased Elemental Defense durante 2 rondas
+Tressa recibe 579 de daño elemental
+Tressa tendrá Decreased Elemental Defense durante 2 rondas
+Olberic termina con HP:5188
+Primrose termina con HP:3470
+Tressa termina con HP:4312
+```
+
+**Pure debuff on traveler (Consume Armor — single effect):**
+```text
+Armor Eater usa Consume Armor
+Olberic tendrá Decreased Physical Defense durante 2 rondas
+```
+
+**Pure multi-debuff on traveler (Acid Spray — two effects):**
+```text
+Army Ant usa Acid Spray
+Primrose tendrá Decreased Physical Defense durante 2 rondas
+Primrose tendrá Decreased Elemental Defense durante 2 rondas
+```
+
+**Buff all beasts (Augmented Magic — iterates all alive beasts in board order):**
+```text
+Curator usa Augmented Magic
+Frost Fox tendrá Increased Elemental Attack durante 2 rondas
+Frost Fox tendrá Increased Elemental Defense durante 2 rondas
+Curator tendrá Increased Elemental Attack durante 2 rondas
+Curator tendrá Increased Elemental Defense durante 2 rondas
+```
+
+**Defending against multi-hit beast attack:**
+`{name} se defiende` is shown **once** before the hit loop, NOT once per hit. All hits still deal halved damage.
+```text
+Remnant usa Double Bite
+Z'aanta se defiende
+Z'aanta recibe 18 de daño físico
+Z'aanta recibe 18 de daño físico
+Z'aanta termina con HP:2620
+```
 
 ## E3: Divine Skills
 - Only appear in skill selection menu when player has ≥ 3 BP
@@ -308,6 +450,8 @@ Then the normal turn menu follows. Multiple Patience activations: one message ea
 - `{name} recibe {N} de daño de tipo {Type} con debilidad` — weakness hit
 - `{name} recibe {N} de daño` — typeless (Vortal Claw)
 - `{name} recibe {N} de daño de tipo físico` — Phys type (no weakness possible)
+- `{name} recibe {N} de daño elemental` — beast elemental attack
+- `{name} recibe {N} de daño físico` — beast physical attack
 - `{name} recupera {N} de vida`
 - `{name} recupera {N} SP`
 - `{name} revive`
@@ -315,7 +459,7 @@ Then the normal turn menu follows. Multiple Patience activations: one message ea
 - `{name} entra en Breaking Point`
 - `{name} tendrá {Effect} durante {N} rondas`
 - `{name} obtiene un turno adicional`
-- `{name} se defiende` — shown before damage line when defender is hit
+- `{name} se defiende` — shown **once per target** before the hit block (not once per hit)
 - `{name} tendrá menor prioridad de turno durante 2 rondas` — Leghold Trap
 
 **Action menu flow (Traveler turn):**
@@ -335,20 +479,40 @@ Then the normal turn menu follows. Multiple Patience activations: one message ea
 - If shields reach 0 mid-combo during a multi-hit attack, all subsequent hits in that exact same combo immediately benefit from the ×1.5 Breaking Point multiplier.
 
 ## Non-Obvious Behaviors
-- Turn queue recalculated every turn (reflects dynamic speed/buff changes)
-- BP recovery: +1 per round per traveler, at round end, max 5 — **skipped for travelers who spent BP that round**
+
+### Turn Queue
+- `TurnQueueManager.SortRemainingQueue(queue)` is called in `CombatManager.HandleSingleTurn` after every action. It re-sorts within priority groups (recovery beasts → defenders → spearheads → normal → desprioritized) using `EffectiveSpeed`. This is how speed buffs/debuffs immediately affect the remaining turn order.
+- `EffectiveSpeed` uses `minRemainingRounds: 1` — includes freshly applied buffs. `EffectiveSpeedNextRound` uses `minRemainingRounds: 2` — only includes buffs that will persist past the current round tick.
+- Defender classification: `HasPriorityNextRound == true && DefendedLastRound == true`. Spearhead: `HasPriorityNextRound == true && DefendedLastRound == false`. Defenders always have both flags set because `SetDefending()` + `SetPriorityNextRound()` are always called together.
+- `ConsumeTurnStartStates()` resets both `HasPriorityNextRound` and `DefendedLastRound` when a unit's turn STARTS (not at round start). So remaining units in the queue still carry their correct priority flags.
+
+### BP & SP
+- BP recovery: +1 per round per traveler, at round end, max 5 — **skipped for travelers who spent BP that round** (`SpentBpThisRound` flag)
 - BP is spent when used; dead units still count toward team BP total (Steorra's Prophecy)
 - **BP prompt is completely omitted** (no output, no input read) when `currentBp == 0`
-- **Status effect re-application extends duration additively** (`existing.RemainingRounds += newEffect.RemainingRounds`); never resets or duplicates
+
+### Status Effects
+- **Re-application extends duration additively** (`existing.RemainingRounds += newEffect.RemainingRounds`); never resets or duplicates the effect slot.
+- `TickStatusEffects()` is called in `EndOfRoundProcessing` AFTER all turns of the round; decrements by 1 and removes effects with 0 remaining rounds.
+- **Buff/debuff multipliers apply to the final damage result**, not to raw stats: `floor(baseRaw × contextMult × AttackMult / DefenseMult)`. "Decreased Defense" on a target → DefenseMult = 2/3 → dividing by 2/3 is ×1.5 effective damage increase.
+- `BuffSkillHandler` shows ALL effect messages first (for all targets), then applies all effects. This separates display from state mutation.
+
+### Beast Skills
+- `BeastSkill.IsNonDamaging` is true when `Modifier == 0 && !IsVortalClaw`. These skills (Consume Armor, Acid Spray, Augmented Magic) must NOT be silently skipped — they apply effects.
+- `BeastTurnController` constructor requires `List<Beast> enemyTeam` (for Augmented Magic which buffs all alive beasts).
+- Beast target selection for pure-debuff skills (`Consume Armor`, `Acid Spray`) still uses `TargetCriteria` parsed from the description — same logic as offensive skills.
+- Beast self-buff (Gather Strength, Flap): applied and shown AFTER the hit loop, BEFORE the final HP line.
+- Beast AoE + per-target debuff (Volcano): for each target — damage hit, then debuff for THAT target, then next target; final HPs shown after all targets.
+
+### Other
 - `TravelerAction` enum must live in its own file, not inside `CombatManager`
-- Data files (`characters.json`, `enemies.json`, `skills.json`, `passive_skills.json`) in `data/` relative to executable
+- Data files: `characters.json`, `enemies.json`, `skills.json`, `passive_skills.json`, `beast_skills.json` — all in `data/` relative to executable
 - Beast `CurrentShields` (not `Shields`) shown in game state
 - If unit dies mid-multi-hit: continue showing all remaining hits at normal damage, unit stays at HP 0
 - Patience extra turns follow board order, not speed order
-- **Buff/debuff multipliers apply to the final damage result**, not to raw stats: `floor(baseRaw × contextMult × AttackMult / DefenseMult)`. "Decreased Defense" on a target makes it take ×1.5 more damage (DefenseMult = 2/3 → dividing by 2/3 multiplies by 1.5).
 
 ## Token Efficiency & Core Behavior
-- Think before acting. Read existing files and "E3 Implementation Plan" found in this file before writing code.
+- Think before acting. Read existing files and this CLAUDE.md before writing code.
 - Be concise in output but thorough in reasoning.
 - Do not re-read files you have already read unless the file may have changed.
 - Skip files over 100KB unless explicitly required.
